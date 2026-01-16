@@ -3,98 +3,139 @@ import re
 from difflib import SequenceMatcher
 from jiwer import wer
 
+# -------------------------------
+# Normalization
+# -------------------------------
+
 def normalize_text(text: str) -> str:
     """
-    Normalize input text for comparison:
-    - Unicode normalization (NFKC)
-    - Lowercase
-    - Remove punctuation
-    - Collapse multiple spaces
+    Standardizes text for comparison (lower, no punct, unicode fix).
     """
     if not text:
         return ""
-    # Unicode normalization + lowercase
+    
     text = unicodedata.normalize("NFKC", text)
-    text = text.lower()
-    # Remove punctuation
-    text = re.sub(r"[^\w\s]", "", text)
-    # Collapse multiple spaces
+    text = text.replace("\u200c", "").replace("\u200d", "")
+    
+    cleaned = []
+    for ch in text:
+        cat = unicodedata.category(ch)
+        if cat.startswith("P") or cat.startswith("S"):
+            continue
+        cleaned.append(ch)
+    
+    text = "".join(cleaned).lower()
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
 def tokenize(text: str):
-    """Tokenize normalized text into words."""
-    text = normalize_text(text)
-    return text.split() if text else []
+    return normalize_text(text).split() if text else []
+
+# -------------------------------
+# Dyslexia-aware scoring
+# -------------------------------
 
 def compute_text_score(target: str, recognized: str) -> dict:
     """
-    Compute detailed scoring for recognized text vs target text.
-
-    Returns a dict:
-    {
-      'text_score': float (0-100),
-      'wer': float (Word Error Rate),
-      'word_alignment': [
-         {
-           'target': 'expected word or ""',
-           'recognized': 'recognized word or ""',
-           'operation': 'correct' / 'substitution' / 'insertion' / 'deletion'
-         },
-         ...
-      ]
-    }
+    Aligns text and calculates accuracy with empathy.
+    
+    Key Dyslexia Logic:
+    - Stuttering (The The) -> 10% Penalty (Almost ignored)
+    - Insertion (The [blue] dog) -> 40% Penalty
+    - Substitution (The [cat] ran) -> 100% Penalty
     """
+    
     target_tokens = tokenize(target)
     rec_tokens = tokenize(recognized)
-
+    
     if not target_tokens:
-        return {
-            "text_score": 0.0,
-            "wer": 1.0,
-            "word_alignment": []
-        }
+        return {"text_score": 0.0, "word_alignment": []}
 
-    # Compute global WER
-    error_rate = wer(" ".join(target_tokens), " ".join(rec_tokens))
-    text_score = max(0.0, 100.0 * (1.0 - error_rate))
-
-    # Compute word-level alignment
     sm = SequenceMatcher(None, target_tokens, rec_tokens)
-    word_alignment = []
-
+    alignment = []
+    
+    # Metrics
+    metrics = {
+        "correct": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "stutters": 0  # Self-corrections
+    }
+    
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        
         if tag == "equal":
             for ti, ri in zip(range(i1, i2), range(j1, j2)):
-                word_alignment.append({
+                alignment.append({
                     "target": target_tokens[ti],
                     "recognized": rec_tokens[ri],
-                    "operation": "correct"
+                    "status": "correct"
                 })
+                metrics["correct"] += 1
+                
         elif tag == "replace":
             for ti, ri in zip(range(i1, i2), range(j1, j2)):
-                word_alignment.append({
+                alignment.append({
                     "target": target_tokens[ti],
                     "recognized": rec_tokens[ri],
-                    "operation": "substitution"
+                    "status": "substitution"
                 })
-        elif tag == "insert":
-            for ri in range(j1, j2):
-                word_alignment.append({
-                    "target": "",
-                    "recognized": rec_tokens[ri],
-                    "operation": "insertion"
-                })
+                metrics["substitutions"] += 1
+                
         elif tag == "delete":
             for ti in range(i1, i2):
-                word_alignment.append({
+                alignment.append({
                     "target": target_tokens[ti],
                     "recognized": "",
-                    "operation": "deletion"
+                    "status": "deletion"
                 })
+                metrics["deletions"] += 1
+                
+        elif tag == "insert":
+            for ri in range(j1, j2):
+                word_inserted = rec_tokens[ri]
+                
+                # Check for Stutter: Is this word identical to the previous one?
+                is_stutter = False
+                if ri > 0 and rec_tokens[ri-1] == word_inserted:
+                    is_stutter = True
+                
+                status_label = "stutter" if is_stutter else "insertion"
+                
+                alignment.append({
+                    "target": "",
+                    "recognized": word_inserted,
+                    "status": status_label
+                })
+                
+                if is_stutter:
+                    metrics["stutters"] += 1
+                else:
+                    metrics["insertions"] += 1
+
+    # -------------------------------
+    # Scoring Calculation
+    # -------------------------------
+    
+    total_target = len(target_tokens)
+    
+    if total_target == 0:
+        score = 0.0
+    else:
+        # Weighted Penalties
+        penalty = (
+            metrics["substitutions"] * 1.0 +  # Strongest
+            metrics["deletions"] * 0.8 +      # Moderate
+            metrics["insertions"] * 0.4 +     # Light
+            metrics["stutters"] * 0.1         # Very Light (Empathy)
+        )
+        
+        raw = (total_target - penalty) / total_target
+        score = max(0.0, min(100.0, raw * 100))
 
     return {
-        "text_score": float(text_score),
-        "wer": float(error_rate),
-        "word_alignment": word_alignment
+        "text_score": round(score, 1),
+        "word_alignment": alignment,
+        "metrics": metrics
     }

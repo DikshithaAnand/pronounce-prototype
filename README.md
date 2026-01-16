@@ -14,6 +14,23 @@ An open-source, offline pronunciation-learning tool for Indian languages, using:
 
 <hr>
 
+<h2>📋 Prerequisites</h2>
+
+<ol>
+<li>
+<b>Install Docker Desktop:</b> 
+Download and install it from the <a href="https://www.docker.com">official Docker website</a>.
+</li>
+<li>
+<b>Install FFmpeg:</b> Required for audio processing (see the <a href="#-installing-ffmpeg">FFmpeg section</a> below).
+</li>
+<li>
+<b>Python 3.9+:</b> Ensure Python is installed on your local machine.
+</li>
+</ol>
+
+<hr>
+
 <h2>🚀 Features (Current)</h2>
 <ul>
 <li>Speech recording/upload</li>
@@ -47,15 +64,19 @@ backend/
     transcribe.py     → Whisper transcription
     scoring.py        → text scoring (to be upgraded)
     tts.py            → gTTS output
+docker/
+    docker-compose.yml → To bring up the database
 frontend/
   app.py              → Streamlit UI
+postgres/
+    db_scripts.sql    → Database scripts
 uploads/
 requirements.txt
 </pre>
 
 <hr>
 
-<h2>🛠️ Installation Guide</h2>
+<h2>🛠️ Installation & Setup Guide</h2>
 
 <h3>1️⃣ Clone the repository</h3>
 <pre>
@@ -63,7 +84,18 @@ git clone &lt;your-repo-url&gt;
 cd pronounce-prototype
 </pre>
 
-<h3>2️⃣ Create and activate virtual environment</h3>
+<h3>2️⃣ Database Setup (Docker)</h3>
+<p>Bring up the containerized PostgreSQL DB and PGAdmin tool:</p>
+<pre>
+cd docker
+docker-compose up -d
+</pre>
+<p>
+<b>Accessing the DB:</b> Open PGAdmin at <code>http://localhost:5050</code>. 
+Use the credentials defined in your <code>docker-compose.yml</code> to log in and execute the scripts located in <code>postgres/db_scripts.sql</code>.
+</p>
+
+<h3>3️⃣ Create and activate virtual environment</h3>
 
 <b>Windows:</b>
 <pre>
@@ -77,7 +109,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 </pre>
 
-<h3>3️⃣ Install dependencies</h3>
+<h3>4️⃣ Install dependencies</h3>
 <pre>
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -85,7 +117,7 @@ pip install -r requirements.txt
 
 <hr>
 
-<h2>🎧 Installing FFmpeg</h2>
+<h2 id="-installing-ffmpeg">🎧 Installing FFmpeg</h2>
 
 <h3>Windows</h3>
 <ol>
@@ -108,12 +140,15 @@ C:\ffmpeg\bin
 
 <hr>
 
-<h2>▶️ Running Backend</h2>
+<h2>▶️ Running the Application</h2>
+
+<h3>Start Backend</h3>
 <pre>
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+# From the root directory
+python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 </pre>
 
-<h2>▶️ Running Frontend</h2>
+<h3>Start Frontend</h3>
 <pre>
 cd frontend
 streamlit run app.py

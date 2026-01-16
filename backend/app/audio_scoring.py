@@ -1,55 +1,46 @@
-import torch
-import torchaudio
-from transformers import Wav2Vec2Processor, Wav2Vec2Model
-from pathlib import Path
-import soundfile as sf
-from typing import Optional
+import numpy as np
+import librosa
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+def compute_acoustic_clarity(audio_path: str, words: list) -> dict:
+    """
+    Analyzes audio quality independently of accent.
+    
+    Metrics:
+    - Confidence: Are distinct phonemes detected? (from Whisper)
+    - Signal Quality: Is the volume consistent?
+    - Articulation: Did they rush or speak clearly?
+    """
+    
+    # 1. Confidence Score (from Whisper)
+    # Measures "how well did the acoustic model match the sounds?"
+    if not words:
+        avg_confidence = 0.0
+    else:
+        avg_confidence = np.mean([w.get("confidence", 0.0) for w in words])
+    
+    # 2. Simple Signal Check (using Librosa)
+    # Detects if audio is too quiet or noisy
+    try:
+        y, sr = librosa.load(audio_path, sr=16000, duration=30)
+        rms = librosa.feature.rms(y=y)
+        avg_volume = np.mean(rms)
+        
+        # Normalize volume score (0.01 is decent threshold for speech)
+        vol_score = min(1.0, avg_volume / 0.01)
+    except:
+        vol_score = 0.5 # Fallback
 
-_MODEL_NAME = "facebook/wav2vec2-xls-r-300m"
-
-_processor = None
-_model = None
-
-def _load_model():
-    global _processor, _model
-    if _processor is None or _model is None:
-        _processor = Wav2Vec2Processor.from_pretrained(_MODEL_NAME)
-        _model = Wav2Vec2Model.from_pretrained(_MODEL_NAME).to(DEVICE)
-        _model.eval()
-    return _processor, _model
-
-def load_audio_mono(path: str, sample_rate: int = 16000):
-    wav, sr = torchaudio.load(path)
-    # Convert to mono if stereo
-    if wav.shape[0] > 1:
-        wav = wav.mean(dim=0, keepdim=True)
-    if sr != sample_rate:
-        wav = torchaudio.functional.resample(wav, sr, sample_rate)
-    return wav.squeeze(0), sample_rate
-
-def get_embedding(audio_path: str) -> torch.Tensor:
-    processor, model = _load_model()
-    waveform, sr = load_audio_mono(audio_path, sample_rate=16000)
-
-    inputs = processor(
-        waveform.numpy(),
-        sampling_rate=sr,
-        return_tensors="pt",
-        padding=True
-    )
-
-    with torch.no_grad():
-        outputs = model(inputs.input_values.to(DEVICE))
-        # outputs.last_hidden_state: (batch, time, hidden_dim)
-        hidden_states = outputs.last_hidden_state[0]  # (time, hidden_dim)
-
-    # Mean pooling over time → single vector
-    embedding = hidden_states.mean(dim=0)
-    return embedding
-
-def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
-    a = a / (a.norm(p=2) + 1e-8)
-    b = b / (b.norm(p=2) + 1e-8)
-    return float(torch.dot(a, b).item())
+    # 3. Final Clarity Metric
+    # Confidence is 80% of the score (it handles accent tolerance best)
+    # Volume is 20% (technical check)
+    
+    clarity_percentage = (avg_confidence * 80) + (vol_score * 20)
+    clarity_percentage = max(0.0, min(100.0, clarity_percentage))
+    
+    return {
+        "clarity_score": round(clarity_percentage, 1),
+        "details": {
+            "model_confidence": round(avg_confidence, 2),
+            "volume_consistency": round(vol_score, 2)
+        }
+    }

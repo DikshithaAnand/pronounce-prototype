@@ -22,6 +22,18 @@ gTTS
 
 # ASR
 whisper
-
+faster-whisper
 # Environment variables
 python-dotenv
+
+
+jiwer
+transformers
+torchaudio
+pydub
+soundfile
+
+#Database
+sqlalchemy 
+psycopg2-binary 
+alembic
