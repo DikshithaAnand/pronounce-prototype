@@ -1,18 +1,33 @@
 from fastapi import APIRouter, HTTPException
-from backend.app.schemas.attempt import AttemptCreate
-from backend.app.db.connection import get_connection
+from app.schemas.attempt import AttemptCreate
+from app.db.connection import get_connection
 
-router = APIRouter(prefix="/attempts", tags=["Attempts"])
+router = APIRouter(
+    prefix="/attempts",
+    tags=["Attempts"]
+)
 
 @router.post("/")
 def create_attempt(attempt: AttemptCreate):
+    """
+    Store one reading attempt summary.
+
+    This stores:
+    - passage user read
+    - overall metrics (accuracy, fluency, wpm, etc.)
+
+    It does NOT store:
+    - word-level errors
+    - mispronounced word list
+    """
+
     conn = get_connection()
     cur = conn.cursor()
 
     try:
         cur.execute(
             """
-            INSERT INTO pronounce.practice_attempts (
+            INSERT INTO practice_attempts (
                 user_id,
                 passage_id,
                 wpm,
@@ -47,7 +62,10 @@ def create_attempt(attempt: AttemptCreate):
 
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to store attempt: {str(e)}"
+        )
 
     finally:
         cur.close()

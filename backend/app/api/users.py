@@ -1,11 +1,27 @@
 from fastapi import APIRouter, HTTPException
-from backend.app.schemas.user import UserCreate
-from backend.app.db.connection import get_connection
 import psycopg2
 
-router = APIRouter(prefix="/users", tags=["Users"])
+# --------------------
+# INTERNAL IMPORTS (FIXED ✅)
+# --------------------
 
-@router.post("/")
+from app.schemas.user import UserCreate
+from app.db.connection import get_connection
+
+# --------------------
+# ROUTER
+# --------------------
+
+router = APIRouter(
+    prefix="/users",
+    tags=["Users"]
+)
+
+# --------------------
+# CREATE USER
+# --------------------
+
+@router.post("/", summary="Create a new user")
 def create_user(user: UserCreate):
     conn = get_connection()
     cur = conn.cursor()
@@ -19,6 +35,7 @@ def create_user(user: UserCreate):
             """,
             (user.username,)
         )
+
         row = cur.fetchone()
         conn.commit()
 
@@ -30,13 +47,27 @@ def create_user(user: UserCreate):
 
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
-        raise HTTPException(status_code=409, detail="Username already exists")
+        raise HTTPException(
+            status_code=409,
+            detail="Username already exists"
+        )
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
     finally:
         cur.close()
         conn.close()
 
-@router.delete("/{user_id}")
+# --------------------
+# DELETE USER
+# --------------------
+
+@router.delete("/{user_id}", summary="Delete user by ID")
 def delete_user(user_id: int):
     conn = get_connection()
     cur = conn.cursor()
@@ -54,10 +85,23 @@ def delete_user(user_id: int):
         row = cur.fetchone()
         if not row:
             conn.rollback()
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
 
         conn.commit()
-        return {"message": "User deleted successfully", "user_id": user_id}
+        return {
+            "message": "User deleted successfully",
+            "user_id": user_id
+        }
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
     finally:
         cur.close()
