@@ -251,6 +251,7 @@ if audio_data:
         # IMPORTANT: Attach Streamlit Context to the thread so it can write to UI
         add_script_run_ctx(loader_thread)
         
+        
         loader_thread.start()
         
         try:
@@ -279,6 +280,7 @@ if audio_data:
         # TABBED RESULTS
         # -----------------------------
         st.divider()
+
         
         # Extract Data
         metrics = result.get("metrics", {})
@@ -373,7 +375,7 @@ if audio_data:
             """, unsafe_allow_html=True)
 
         # --- TAB 2: ERROR TABLE ---
-        with t2:
+        with t2;
             st.subheader("Word-by-Word Analysis")
             st.markdown(render_comparison_table(error_list), unsafe_allow_html=True)
 
