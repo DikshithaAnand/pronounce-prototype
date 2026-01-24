@@ -167,5 +167,11 @@ streamlit run app.py
 <li>UI visualization</li>
 </ul>
 
+
+
+<p>Practice attempts and word-level analytics are now persisted to PostgreSQL,
+including accuracy, fluency, WPM, and error breakdowns.</p>
+
+
 <h2>📝 License</h2>
 <p>MIT License</p>
