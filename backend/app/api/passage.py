@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from backend.app.schemas.passage import PassageCreate
-from backend.app.db.connection import get_connection
+from app.schemas.passage import PassageCreate
+from app.db.connection import get_connection
 import random
 
 router = APIRouter(prefix="/passages", tags=["Passages"])

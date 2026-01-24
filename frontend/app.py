@@ -7,6 +7,7 @@ import textwrap
 from pathlib import Path
 from datetime import datetime
 from streamlit.runtime.scriptrunner import add_script_run_ctx
+from api_client import create_user, process_audio, get_passage
 
 # -----------------------------
 # Configuration
@@ -197,13 +198,16 @@ with col_btn:
     if st.button("🔄 New Passage", use_container_width=True):
         try:
             with st.spinner("Fetching text..."):
-                r = requests.get(PASSAGE_URL, params={"language": lang_code})
+                r = get_passage(lang_code)
+
                 if r.status_code == 200:
                     data = r.json()
                     st.session_state.current_passage = data["passage"]
+                    st.session_state.current_passage_id = data["passage_id"] 
                     st.rerun()
-        except:
-            st.error("Backend Down")
+        except requests.exceptions.RequestException:
+            st.error("Backend not reachable")
+
 
 # Dynamic Height for Text Area
 text_len = len(st.session_state.current_passage)
@@ -214,6 +218,7 @@ target_text = st.text_area(
     value=st.session_state.current_passage, 
     height=dynamic_height
 )
+st.write("DEBUG passage_id:", st.session_state.get("current_passage_id"))
 
 # --- Audio Input ---
 audio_data = st.audio_input("Record your voice")
@@ -226,7 +231,12 @@ if audio_data:
         # Prepare file for upload
         audio_data.seek(0)
         files = {"file": ("recording.webm", audio_data, "audio/webm")}
-        data = {"target_text": target_text, "language": lang_code}
+        data = {
+                     "target_text": target_text,
+                     "language": lang_code,
+                    "passage_id": st.session_state.get("current_passage_id")
+    }
+
         
         # --- DYNAMIC LOADING ANIMATION ---
         status_placeholder = st.empty()
@@ -245,7 +255,8 @@ if audio_data:
         
         try:
             # Main synchronous API call
-            response = requests.post(BACKEND_URL, files=files, data=data)
+            response = process_audio(files, data)
+
             
             # Stop the animation
             stop_event.set()

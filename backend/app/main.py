@@ -8,57 +8,84 @@ import time
 import shutil
 import random
 import logging
+from contextlib import asynccontextmanager
 
-# --- INTERNAL IMPORTS ---
-# 1. The Core Scoring Engine
-from backend.app.hybrid_scoring import compute_per_word_scores
-# 2. The New Modular Utility for Error Analysis
-from backend.app.scoring_utils import generate_analysis_report
-# 3. FastAPI Route Modules (API Layer)
-from backend.app.api.users import router as users_router
-from backend.app.api.passage import router as passage_router
-from backend.app.api.attempts import router as attempts_router
-from backend.app.api.errors import router as errors_router
+from app.db.attempt_repo import save_practice_attempt
+from app.db.error_repo import save_word_errors
+
+from app.model_loader import get_model
+from app.hybrid_scoring import compute_per_word_scores
+from app.scoring_utils import generate_analysis_report
+
+from app.api.users import router as users_router
+from app.api.passage import router as passage_router
+from app.api.attempts import router as attempts_router
+from app.api.errors import router as errors_router
+
+
 # --------------------
 # LOGGING SETUP
 # --------------------
 
 class InMemoryHandler(logging.Handler):
-    """
-    Captures logs in a list to send back to the frontend.
-    """
     def __init__(self):
         super().__init__()
         self.log_records = []
 
     def emit(self, record):
-        try:
-            msg = self.format(record)
-            self.log_records.append({
-                "level": record.levelname,
-                "message": msg,
-                "timestamp": record.created
-            })
-        except Exception:
-            self.handleError(record)
+        self.log_records.append({
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "timestamp": record.created
+        })
 
-# Configure Root Logger to print to Terminal (Standard Output)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()]
 )
 
 logger = logging.getLogger(__name__)
-app = FastAPI()
+
+
 # --------------------
-# API ROUTERS
+# LIFESPAN
+# --------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Starting Pronounce Backend...")
+    try:
+        logger.info("⏳ Loading Whisper model...")
+        get_model()
+        logger.info("✅ Model loaded")
+    except Exception as e:
+        logger.error(f"❌ Model load failed: {e}")
+    yield
+    logger.info("🛑 Shutting down backend")
+
+
+# --------------------
+# FASTAPI APP
+# --------------------
+
+app = FastAPI(
+    title="Pronounce Backend",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+
+# --------------------
+# ROUTERS
 # --------------------
 
 app.include_router(users_router)
 app.include_router(passage_router)
 app.include_router(attempts_router)
 app.include_router(errors_router)
+
+
 # --------------------
 # CORS
 # --------------------
@@ -70,59 +97,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # --------------------
-# Paths
+# FILE PATHS
 # --------------------
 
 ROOT_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT_DIR / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(UPLOAD_DIR)), name="static")
 
+
 # --------------------
-# Constants & Data
+# CONSTANTS
 # --------------------
 
 LANG_MAP = {
-    "english": "en", "en": "en",
-    "hindi": "hi", "hi": "hi",
-    "tamil": "ta", "ta": "ta",
-    "telugu": "te", "te": "te",
-    "kannada": "kn", "kn": "kn",
-    "gujarati": "gu", "gu": "gu",
+    "en": "en", "english": "en",
+    "hi": "hi", "hindi": "hi",
+    "ta": "ta", "tamil": "ta",
+    "te": "te", "telugu": "te",
+    "kn": "kn", "kannada": "kn",
+    "gu": "gu", "gujarati": "gu",
 }
 
 PASSAGE_BANK = {
     "en": [
-        ("en_nature", "The forest was alive with the sounds of early morning. Sunlight filtered through the dense canopy of ancient oak trees, casting dappled shadows on the mossy ground below. Somewhere in the distance, a woodpecker hammered rhythmically against a hollow trunk, while squirrels chased each other spiraling up the rough bark. The air smelled of damp earth and pine needles, a refreshing scent that filled the lungs with every breath. A small stream meandered through the underbrush, its crystal-clear water bubbling over smooth gray stones. As I walked along the narrow path, the crunch of dry leaves under my boots was the only sign of my presence in this peaceful sanctuary. It was a perfect moment of solitude, away from the noise and chaos of the city, where time seemed to slow down and nature’s simple beauty took center stage."),
-        ("en_tech", "In the rapidly evolving world of technology, artificial intelligence has become a cornerstone of modern innovation. From voice assistants that manage our daily schedules to complex algorithms that diagnose medical conditions, machines are learning to process information in ways that mimic human cognition. However, this progress brings ethical questions about privacy and the future of work. As automation takes over repetitive tasks, the demand for creative and emotional intelligence in the workforce is rising. We are entering an era where collaboration between humans and machines is not just a possibility, but a necessity. Understanding how these systems function is no longer reserved for computer scientists; it is becoming a fundamental skill for anyone navigating the digital landscape. The challenge lies in ensuring that these powerful tools are used to enhance human potential rather than replace it."),
+        ("p1", "The forest was alive with the sounds of early morning."),
+        ("p2", "Artificial intelligence is transforming modern technology."),
     ],
     "hi": [
-        ("hi_1", "आज का मौसम बहुत सुहाना है। बच्चे पार्क में खेल रहे हैं।"),
+        ("p3", "आज का मौसम बहुत सुहाना है।")
     ]
 }
 
+
 # --------------------
-# Utilities
+# UTILITIES
 # --------------------
 
-def detect_and_rename(filepath: Path) -> Path:
-    """Checks header bytes to determine real extension (WebM vs WAV)."""
-    with open(filepath, "rb") as f:
+def detect_and_rename(path: Path) -> Path:
+    with open(path, "rb") as f:
         header = f.read(4)
 
-    new_path = filepath
-    if header.startswith(b'\x1a\x45\xdf\xa3'):  # WEBM
-        if filepath.suffix != ".webm":
-            new_path = filepath.with_suffix(".webm")
-            os.rename(filepath, new_path)
-    elif header.startswith(b'RIFF'):  # WAV
-        if filepath.suffix != ".wav":
-            new_path = filepath.with_suffix(".wav")
-            os.rename(filepath, new_path)
-    
-    return new_path
+    if header.startswith(b"\x1a\x45\xdf\xa3") and path.suffix != ".webm":
+        new = path.with_suffix(".webm")
+        os.rename(path, new)
+        return new
+
+    if header.startswith(b"RIFF") and path.suffix != ".wav":
+        new = path.with_suffix(".wav")
+        os.rename(path, new)
+        return new
+
+    return path
+
 
 # --------------------
 # API ENDPOINTS
@@ -132,133 +162,84 @@ def detect_and_rename(filepath: Path) -> Path:
 def process_audio(
     file: UploadFile = File(...),
     target_text: str = Form(...),
-    language: str = Form("en")
+    language: str = Form("en"),
 ):
-    # 1. Attach Memory Logger
     memory_handler = InMemoryHandler()
-    formatter = logging.Formatter('%(message)s')
-    memory_handler.setFormatter(formatter)
-    root_logger = logging.getLogger()
-    root_logger.addHandler(memory_handler)
-    
-    start_time = time.time()
+    logging.getLogger().addHandler(memory_handler)
+
     raw_path = None
     clean_path = None
+    start_time = time.time()
 
     try:
-        logger.info(f"🚀 Request received. File: {file.filename}")
-        
-        iso_lang = LANG_MAP.get(language.lower().strip(), "en")
-        logger.info(f"ℹ️  Language set to: {iso_lang}")
+        lang = LANG_MAP.get(language.lower(), "en")
 
-        # Save Raw
-        raw_filename = f"raw_{int(time.time())}_{file.filename}"
-        raw_path = UPLOAD_DIR / raw_filename
+        raw_path = UPLOAD_DIR / f"raw_{int(time.time())}_{file.filename}"
         with open(raw_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
-        # Format Check
+
         raw_path = detect_and_rename(raw_path)
-        
-        # Audio Processing
-        logger.info("🔊 Decoding audio stream...")
-        audio = AudioSegment.from_file(str(raw_path))
-        
-        duration_sec = audio.duration_seconds
-        logger.info(f"⏱️  Audio Duration: {round(duration_sec, 2)}s")
 
-        if audio.max_dBFS == -float("inf"):
-            raise HTTPException(400, "Silent audio detected")
-        if duration_sec < 0.5:
-            raise HTTPException(400, "Audio too short (< 0.5s)")
+        audio = AudioSegment.from_file(raw_path)
+        duration = audio.duration_seconds
 
-        # Convert to 16kHz Mono WAV
-        logger.info("🛠️  Transcoding to 16kHz Mono WAV...")
-        clean_filename = f"clean_{int(time.time())}.wav"
-        clean_path = UPLOAD_DIR / clean_filename
-        
-        audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-        audio.export(clean_path, format="wav")
+        if duration < 0.5:
+            raise HTTPException(status_code=400, detail="Audio too short")
 
-        # Call Scoring Engine
-        logger.info("🧠 Invoking Hybrid Scoring Engine...")
+        clean_path = UPLOAD_DIR / f"clean_{int(time.time())}.wav"
+        audio.set_frame_rate(16000).set_channels(1).export(clean_path, format="wav")
+
         result = compute_per_word_scores(
             target_text=target_text,
-            lang_code=iso_lang,
+            lang_code=lang,
             audio_path=str(clean_path)
         )
-        logger.info("✨ Scoring calculation complete.")
 
-        # ----------------------------------------
-        # MODULAR ANALYSIS & METRICS
-        # ----------------------------------------
-        logger.info("📊 Generating Detailed Error Analysis...")
-        
-        # We use the separate utility function here to keep main.py clean
-        metrics, error_report = generate_analysis_report(
+        metrics, errors = generate_analysis_report(
             alignment=result.get("word_alignment", []),
             target_text=target_text,
-            duration_sec=duration_sec
+            duration_sec=duration
         )
-        
-        # Merge the detailed metrics back into the result object
-        # IMPORTANT: Overwriting component scores with the robust calculation from utils
-        result["detailed_metrics"] = metrics
-        if "accuracy" in metrics:
-            result["components"]["accuracy"] = metrics["accuracy"]
-        if "fluency" in metrics:
-            result["components"]["fluency"] = metrics["fluency"]
-        
-        # ----------------------------------------
-        # RESPONSE
-        # ----------------------------------------
+
+        attempt_id = save_practice_attempt(
+            user_id=1,
+            passage_text=target_text,
+            metrics=metrics,
+            components=result.get("components", {})
+        )
+
+        save_word_errors(
+            attempt_id=attempt_id,
+            error_list=errors
+        )
+
         latency = round(time.time() - start_time, 2)
-        logger.info(f"🏁 Process finished in {latency}s")
 
         return {
-            "meta": {
-                "latency_sec": latency,
-                "language": iso_lang,
-            },
-            "target_text": target_text,
-            "recognized_text": result.get("recognized_text", ""),
-            "overall_score": result.get("overall_score", 0),
+            "meta": {"latency": latency, "language": lang},
             "components": result.get("components", {}),
-            "metrics": result.get("detailed_metrics", {}),
+            "metrics": metrics,
             "word_alignment": result.get("word_alignment", []),
-            
-            # This is the new field for the frontend tabs
-            "error_analysis": error_report,
-            
-            # This allows the frontend to show the terminal logs
-            "logs": memory_handler.log_records
+            "error_analysis": errors,
+            "logs": memory_handler.log_records,
         }
 
     except Exception as e:
-        logger.error(f"🔥 Critical Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Processing Error: {str(e)}")
+        logger.exception("Processing failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
     finally:
-        # Cleanup
         for p in [raw_path, clean_path]:
             if p and p.exists():
-                try: os.remove(p)
-                except: pass
-        
-        # Detach Logger
-        root_logger.removeHandler(memory_handler)
-        
+                try:
+                    os.remove(p)
+                except:
+                    pass
+        logging.getLogger().removeHandler(memory_handler)
+
+
 @app.get("/get-passage/")
 def get_passage(language: str = "en"):
-    iso_lang = LANG_MAP.get(language.lower().strip(), "en")
-    if iso_lang not in PASSAGE_BANK:
-        iso_lang = "en"
-    
-    pid, passage = random.choice(PASSAGE_BANK[iso_lang])
-    return {
-        "language": iso_lang,
-        "passage_id": pid,
-        "passage": passage
-    }
+    lang = LANG_MAP.get(language.lower(), "en")
+    pid, passage = random.choice(PASSAGE_BANK.get(lang, PASSAGE_BANK["en"]))
+    return {"passage_id": pid, "language": lang, "passage": passage}

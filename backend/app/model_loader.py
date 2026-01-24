@@ -1,5 +1,6 @@
 from faster_whisper import WhisperModel
 import torch
+import multiprocessing
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -14,11 +15,12 @@ def get_model():
         model_size = "base.en" 
         
         print(f"Loading FasterWhisper model: {model_size} on {DEVICE}...")
-        
+        threads = multiprocessing.cpu_count()
         _model = WhisperModel(
             model_size,
             device=DEVICE,
-            compute_type="int8" if DEVICE == "cpu" else "float16"
+            compute_type="int8" if DEVICE == "cpu" else "float16",
+            cpu_threads=threads
         )
 
         print("FasterWhisper model loaded successfully.")
