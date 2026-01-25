@@ -46,3 +46,4 @@ def save_practice_attempt(user_id: int, passage_text: str, metrics: dict, compon
     finally:
         cur.close()
         conn.close()
+        
