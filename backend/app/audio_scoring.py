@@ -3,7 +3,7 @@ import librosa
 
 def compute_acoustic_clarity(audio_path: str, words: list) -> dict:
     """
-    Analyzes audio quality independently of accent.
+    Analyzes audio quality independently of Accent.
     
     Metrics:
     - Confidence: Are distinct phonemes detected? (from Whisper)
