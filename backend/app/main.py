@@ -10,17 +10,17 @@ import random
 import logging
 from contextlib import asynccontextmanager
 
-from app.db.attempt_repo import save_practice_attempt
-from app.db.error_repo import save_word_errors
+from backend.app.db.attempt_repo import save_practice_attempt
+from backend.app.db.error_repo import save_word_errors
 
-from app.model_loader import get_model
-from app.hybrid_scoring import compute_per_word_scores
-from app.scoring_utils import generate_analysis_report
+from backend.app.model_loader import get_model
+from backend.app.hybrid_scoring import compute_per_word_scores
+from backend.app.scoring_utils import generate_analysis_report
 
-from app.api.users import router as users_router
-from app.api.passage import router as passage_router
-from app.api.attempts import router as attempts_router
-from app.api.errors import router as errors_router
+from backend.app.api.users import router as users_router
+from backend.app.api.passage import router as passage_router
+from backend.app.api.attempts import router as attempts_router
+from backend.app.api.errors import router as errors_router
 
 
 # --------------------

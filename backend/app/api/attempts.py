@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas.attempt import AttemptCreate
-from app.db.connection import get_connection
+from backend.app.schemas.attempt import AttemptCreate
+from backend.app.db.connection import get_connection
 
 router = APIRouter(
     prefix="/attempts",

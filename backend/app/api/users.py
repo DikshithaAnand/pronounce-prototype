@@ -5,8 +5,8 @@ import psycopg2
 # INTERNAL IMPORTS (FIXED ✅)
 # --------------------
 
-from app.schemas.user import UserCreate
-from app.db.connection import get_connection
+from backend.app.schemas.user import UserCreate
+from backend.app.db.connection import get_connection
 
 # --------------------
 # ROUTER

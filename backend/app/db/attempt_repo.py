@@ -1,4 +1,4 @@
-from app.db.connection import get_connection
+from backend.app.db.connection import get_connection
 
 
 def save_practice_attempt(user_id: int, passage_text: str, metrics: dict, components: dict):

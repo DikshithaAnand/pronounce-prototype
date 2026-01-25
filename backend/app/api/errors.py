@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas.error import ErrorCreate
-from app.db.connection import get_connection
+from backend.app.schemas.error import ErrorCreate
+from backend.app.db.connection import get_connection
 
 router = APIRouter(prefix="/errors", tags=["Errors"])
 

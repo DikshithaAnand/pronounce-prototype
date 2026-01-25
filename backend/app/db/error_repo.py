@@ -1,4 +1,4 @@
-from app.db.connection import get_connection
+from backend.app.db.connection import get_connection
 
 
 def save_word_errors(attempt_id: int, error_list: list):
