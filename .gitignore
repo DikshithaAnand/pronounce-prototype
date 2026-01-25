@@ -1,10 +1,97 @@
-__pycache__/
-*.pyc
-.vscode/
-.idea/
-venv/
+# =========================
+# ENVIRONMENT / SECRETS
+# =========================
+.env
+.env.*
+!.env.example
 uploads/
-*.mp3
-*.wav
+# =========================
+# NODE / JAVASCRIPT
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+
+# =========================
+# PYTHON
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env.venv
+venv/
+ENV/
+.venv/
+
+# =========================
+# JAVA / JVM
+# =========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# =========================
+# DOTNET
+# =========================
+bin/
+obj/
+
+# =========================
+# LOG FILES
+# =========================
+logs/
+*.log
+
+# =========================
+# DATABASE FILES
+# =========================
+*.sqlite
+*.db
+
+# =========================
+# IDE / EDITORS
+# =========================
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# =========================
+# OS FILES
+# =========================
 .DS_Store
-*.venv*
+Thumbs.db
+desktop.ini
+
+# =========================
+# TEMP FILES
+# =========================
+tmp/
+temp/
+.cache/
+
+# =========================
+# DOCKER
+# =========================
+docker-compose.override.yml
+
+# =========================
+# TEST COVERAGE
+# =========================
+coverage/
+.nyc_output/
+
+# =========================
+# MISC
+# =========================
+*.bak
+*.tmp
+*.old

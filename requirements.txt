@@ -37,3 +37,5 @@ soundfile
 sqlalchemy
 psycopg2-binary
 alembic
+supabase
+python-dotenv
