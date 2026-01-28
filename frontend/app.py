@@ -420,28 +420,13 @@ def render_dashboard():
             r = requests.get(f"{ANALYTICS_URL}{user_id}")
             if r.status_code == 200:
                 payload = r.json()
-                
-                # Unpack Data
                 stats = payload.get("stats", {})
                 history = payload.get("history", [])
                 error_dist = payload.get("errors", {})
-                
-                # New Difficulty Data
                 diff_analysis = payload.get("difficulty_analysis", {})
                 diff_avgs = diff_analysis.get("averages", {})
                 diff_raw = diff_analysis.get("raw", [])
-
-                # --- NEW: Unpack Word-Level Error Data ---
-                # Ensure your backend sends this key 'word_analysis'
-                # Structure expected: 
-                # {
-                #   'word': ['the', 'rabbit', ...],
-                #   'mispronounced': [2, 15, ...],
-                #   'stuttered': [1, 5, ...],
-                #   'wrong': [0, 2, ...]
-                # }
-                word_analysis = payload.get("word_analysis", {}) 
-                
+                word_analysis = payload.get("word_analysis", {}) # Ensure this is fetched
             else:
                 st.error("Failed to fetch analytics.")
                 return
@@ -453,7 +438,7 @@ def render_dashboard():
         st.info("No practice sessions found yet. Go to 'Practice Mode' and record your first session!")
         return
 
-    # --- TOP CARDS (Big Stats) ---
+    # --- TOP CARDS ---
     st.divider()
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Sessions", stats.get("total_attempts", 0))
@@ -465,13 +450,13 @@ def render_dashboard():
     # ==========================================
     #  ROW 1: DIFFICULTY DIAGNOSTICS
     # ==========================================
-    st.subheader("🧩 Row 1: The Difficulty Gap")
+    st.subheader("🧩 The Difficulty Gap")
     st.caption("Compare your performance across Easy, Medium, and Hard passages.")
 
     if diff_raw:
         r1_c1, r1_c2 = st.columns(2)
 
-        # --- GRAPH 1.1: Challenge Gap (Bar Chart) ---
+        # --- GRAPH 1.1: Challenge Gap (Accuracy Bar Chart) ---
         with r1_c1:
             chart_data = [
                 {"Level": "Easy", "Accuracy": diff_avgs.get("easy", 0)},
@@ -480,27 +465,32 @@ def render_dashboard():
             ]
             fig_gap = px.bar(
                 chart_data, x="Level", y="Accuracy", color="Level",
-                title="Accuracy by Difficulty", text="Accuracy",
+                title="Avg Accuracy by Difficulty", text="Accuracy",
                 color_discrete_map={"Easy": "#2ecc71", "Medium": "#f1c40f", "Hard": "#e74c3c"}
             )
-            fig_gap.update_traces(texttemplate='%{text}%', textposition='outside')
+            fig_gap.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig_gap.update_yaxes(range=[0, 110])
             st.plotly_chart(fig_gap, use_container_width=True)
 
-        # --- GRAPH 1.2: Stamina Check (Box Plot) ---
+        # --- GRAPH 1.2: Speed Limit (WPM Bar Chart) ---
+        # [CHANGE]: Switched from Box Plot to Bar Chart for clarity
         with r1_c2:
             df_raw = pd.DataFrame(diff_raw)
             if not df_raw.empty:
-                # Normalize difficulty strings
                 df_raw['difficulty'] = df_raw['difficulty'].fillna('easy').str.capitalize()
                 
-                fig_stam = px.box(
-                    df_raw, x="difficulty", y="wpm", color="difficulty",
-                    title="Reading Speed (WPM) vs Difficulty",
+                # Calculate Average WPM per Difficulty
+                avg_wpm_df = df_raw.groupby('difficulty')['wpm'].mean().reset_index()
+                
+                fig_speed = px.bar(
+                    avg_wpm_df, x="difficulty", y="wpm", color="difficulty",
+                    title="Avg Reading Speed (WPM)",
+                    text="wpm",
                     category_orders={"difficulty": ["Easy", "Medium", "Hard"]},
                     color_discrete_map={"Easy": "#2ecc71", "Medium": "#f1c40f", "Hard": "#e74c3c"}
                 )
-                st.plotly_chart(fig_stam, use_container_width=True)
+                fig_speed.update_traces(texttemplate='%{text:.0f} WPM', textposition='outside')
+                st.plotly_chart(fig_speed, use_container_width=True)
     else:
         st.info("Complete more sessions to unlock Difficulty Analysis.")
 
@@ -509,7 +499,7 @@ def render_dashboard():
     # ==========================================
     #  ROW 2: LEARNING DYNAMICS
     # ==========================================
-    st.subheader("🧠 Row 2: Learning Dynamics")
+    st.subheader("🧠 Learning Dynamics")
     
     r2_c1, r2_c2 = st.columns(2)
 
@@ -523,7 +513,9 @@ def render_dashboard():
                 df_matrix, x="accuracy_score", y="wpm", color="difficulty",
                 title="Fluency Matrix (Speed vs Accuracy)",
                 labels={"accuracy_score": "Accuracy (%)", "wpm": "Speed (WPM)"},
-                size_max=15,
+                size_max=20, # Made dots slightly bigger
+                # Opacity helps if dots overlap
+                opacity=0.7, 
                 color_discrete_map={"Easy": "#2ecc71", "Medium": "#f1c40f", "Hard": "#e74c3c"}
             )
             # Add quadrants reference lines
@@ -550,20 +542,50 @@ def render_dashboard():
     st.divider()
 
     # ==========================================
-    #  ROW 3: ERROR BREAKDOWN & LOGS
+    #  ROW 3: ERROR BREAKDOWN
     # ==========================================
-    st.subheader("🕵️ Row 3: Error Analysis")
+    st.subheader("🕵️ Error Analysis")
 
     r3_c1, r3_c2 = st.columns([1, 2])
 
     # --- GRAPH 3.1: Error Distribution (Pie) ---
+    # [CHANGE]: Renaming Database terms to User terms
     with r3_c1:
         if error_dist:
-            err_df = pd.DataFrame(list(error_dist.items()), columns=['Error Type', 'Count'])
+            # 1. Convert Dictionary to DataFrame
+            err_df = pd.DataFrame(list(error_dist.items()), columns=['Raw Type', 'Count'])
+            
+            # 2. Define Mapping (Database Keys -> Display Names)
+            # We added "mispronunciation" to map to "Wrong" so it turns RED
+            name_map = {
+                "deletion": "Skipped",          # Becomes Grey
+                "substitution": "Mispronounced",# Becomes Yellow
+                "mispronunciation": "Wrong",    # <--- NEW: Becomes Red
+                "insertion": "Wrong",           # Becomes Red
+                "wrong": "Wrong"                # Catch-all
+            }
+            
+            # 3. Apply Mapping & Group
+            err_df['Display Name'] = err_df['Raw Type'].map(name_map).fillna("Other")
+            df_grouped = err_df.groupby('Display Name', as_index=False)['Count'].sum()
+
+            # 4. Define Your Custom Color Scheme
+            custom_colors = {
+                "Wrong": "#ef553b",         # Red
+                "Mispronounced": "#f1c40f", # Yellow
+                "Skipped": "#95a5a6",       # Grey
+                "Other": "#bdc3c7"
+            }
+
+            # 5. Generate Chart
             fig_pie = px.pie(
-                err_df, values='Count', names='Error Type', 
-                title="Error Types", hole=0.4,
-                color_discrete_sequence=px.colors.qualitative.Pastel
+                df_grouped, 
+                values='Count', 
+                names='Display Name', 
+                title="Error Types", 
+                hole=0.4,
+                color='Display Name',
+                color_discrete_map=custom_colors
             )
             st.plotly_chart(fig_pie, use_container_width=True)
         else:
@@ -576,12 +598,10 @@ def render_dashboard():
             display_df = df_hist[['created_at', 'accuracy_score', 'wpm', 'fluency_score']].sort_values('created_at', ascending=False).head(5)
             st.dataframe(display_df, use_container_width=True)
 
-    st.divider()
-
     # ==========================================
     #  ROW 4: ERROR PATTERN RECOGNITION (NEW)
     # ==========================================
-    st.subheader("🔍 Row 4: Specific Word Struggles")
+    st.subheader("🔍Specific Word Struggles")
     st.caption("Visualizing specific words that cause frequent stumbles.")
 
     # Check if we have word analysis data
