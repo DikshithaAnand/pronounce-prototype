@@ -5,6 +5,8 @@
 .env.*
 !.env.example
 uploads/
+backend/.env
+frontend/.env
 # =========================
 # NODE / JAVASCRIPT
 # =========================
