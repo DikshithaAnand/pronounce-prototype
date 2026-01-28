@@ -187,7 +187,8 @@ def process_audio(
     file: UploadFile = File(...),
     target_text: str = Form(...),
     language: str = Form("en"),
-    user_id: str = Form("Guest_User")
+    user_id: str = Form("Guest_User"),
+    difficulty: str = Form("easy")
 ):
     # 1. Attach Memory Logger
     memory_handler = InMemoryHandler()
@@ -275,7 +276,8 @@ def process_audio(
                 user_name=user_id, 
                 target_text=target_text,
                 metrics=metrics,
-                error_report=error_report
+                error_report=error_report,
+                difficulty=difficulty
             )
             logger.info("✅ Data saved to cloud successfully!")
         except Exception as e:

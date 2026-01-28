@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 #  WRITE OPERATIONS (Existing & Preserved)
 # ==========================================
 
-def save_attempt(user_name: str, target_text: str, metrics: dict, error_report: list):
+def save_attempt(user_name: str, target_text: str, metrics: dict, error_report: list,difficulty: str = "easy"):
     """
     Saves the attempt metadata AND the detailed error logs to Supabase.
     """
@@ -18,16 +18,15 @@ def save_attempt(user_name: str, target_text: str, metrics: dict, error_report: 
         return None
 
     try:
-        # 1. Insert the Main Attempt (The "Header")
         attempt_data = {
             "user_name": user_name,
-            "passage_text": target_text[:500],  # Store snippet
+            "passage_text": target_text[:500],
+            "difficulty": difficulty,  # <--- NEW FIELD
             "wpm": metrics.get("wpm", 0),
             "accuracy_score": metrics.get("accuracy", 0),
             "fluency_score": metrics.get("fluency", 0),
             "mispronounced_count": metrics.get("mispronunciation_count", 0)
-        }
-        
+        }    
         # 'data' returns a list of inserted rows (we need the ID)
         response = client.table("attempts").insert(attempt_data).execute()
         

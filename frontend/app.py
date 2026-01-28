@@ -236,6 +236,7 @@ def render_practice_mode(lang_code):
                     
                     if r.status_code == 200:
                         st.session_state.current_passage = r.json()["passage"]
+                        st.session_state.current_difficulty = diff_code
                         st.session_state["analysis_result"] = None 
                         st.rerun()
                     else:
@@ -245,6 +246,8 @@ def render_practice_mode(lang_code):
 
     if "current_passage" not in st.session_state:
         st.session_state.current_passage = "Click 'New Passage' to start."
+    if "current_difficulty" not in st.session_state:
+        st.session_state.current_difficulty = "easy"
     
     if "analysis_result" not in st.session_state:
         st.session_state["analysis_result"] = None
@@ -264,6 +267,7 @@ def render_practice_mode(lang_code):
             data = {
                 "target_text": target_text, 
                 "language": lang_code, 
+                "difficulty": st.session_state.current_difficulty,
                 "user_id": st.session_state["user"].id
             }
             
