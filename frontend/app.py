@@ -206,13 +206,34 @@ def render_practice_mode(lang_code):
     st.title("🎤 Practice Studio")
     st.caption("Read aloud and get instant feedback.")
 
-    col_btn, col_empty = st.columns([1, 3])
-    with col_btn:
-        # FIX: width="stretch"
+    # --- HELPER: Invisible Audio Player ---
+    def autoplay_audio(audio_bytes):
+        import base64
+        b64 = base64.b64encode(audio_bytes).decode()
+        md = f"""
+            <audio autoplay style="display:none;">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+            </audio>
+        """
+        st.markdown(md, unsafe_allow_html=True)
+    
+    # --- CONTROL ROW (Difficulty + New Passage) ---
+    c1, c2 = st.columns([1, 1]) # Split space 50/50
+
+    with c1:
+        # Local selector for difficulty
+        difficulty = st.selectbox("Difficulty Level", ["Easy", "Medium", "Hard"], index=0, label_visibility="collapsed")
+        diff_code = difficulty.lower()
+
+    with c2:
+        # Button is now right next to the dropdown
         if st.button("🔄 New Passage", width="stretch"):
             try:
                 with st.spinner("Fetching text..."):
-                    r = requests.get(PASSAGE_URL, params={"language": lang_code}, timeout=3)
+                    # Pass the locally selected 'diff_code'
+                    params = {"language": lang_code, "difficulty": diff_code}
+                    r = requests.get(PASSAGE_URL, params=params, timeout=3)
+                    
                     if r.status_code == 200:
                         st.session_state.current_passage = r.json()["passage"]
                         st.session_state["analysis_result"] = None 
@@ -237,7 +258,6 @@ def render_practice_mode(lang_code):
     if audio_data:
         st.audio(audio_data)
         
-        # FIX: width="stretch"
         if st.button("Analyze Reading", type="primary", width="stretch"):
             audio_data.seek(0)
             files = {"file": ("recording.webm", audio_data, "audio/webm")}
@@ -376,7 +396,6 @@ def render_practice_mode(lang_code):
         with t5:
             st.subheader("Backend Logs")
             st.markdown(render_terminal_logs(logs), unsafe_allow_html=True)
-
 # -----------------------------
 # 4. ANALYTICS DASHBOARD (FIXED)
 # -----------------------------
@@ -512,6 +531,8 @@ def main():
         with col_lang:
             selected_language = st.selectbox("Language", list(LANGUAGES.keys()))
             lang_code = LANGUAGES[selected_language]
+            
+        
         
         st.divider()
         

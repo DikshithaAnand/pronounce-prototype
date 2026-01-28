@@ -137,15 +137,26 @@ LANG_MAP = {
 }
 
 PASSAGE_BANK = {
-    "en": [
-        ("en_nature", "The forest was alive with the sounds of early morning. Sunlight filtered through the dense canopy of ancient oak trees, casting dappled shadows on the mossy ground below. Somewhere in the distance, a woodpecker hammered rhythmically against a hollow trunk, while squirrels chased each other spiraling up the rough bark. The air smelled of damp earth and pine needles, a refreshing scent that filled the lungs with every breath. A small stream meandered through the underbrush, its crystal-clear water bubbling over smooth gray stones. As I walked along the narrow path, the crunch of dry leaves under my boots was the only sign of my presence in this peaceful sanctuary. It was a perfect moment of solitude, away from the noise and chaos of the city, where time seemed to slow down and nature’s simple beauty took center stage."),
-        ("en_tech", "In the rapidly evolving world of technology, artificial intelligence has become a cornerstone of modern innovation. From voice assistants that manage our daily schedules to complex algorithms that diagnose medical conditions, machines are learning to process information in ways that mimic human cognition. However, this progress brings ethical questions about privacy and the future of work. As automation takes over repetitive tasks, the demand for creative and emotional intelligence in the workforce is rising. We are entering an era where collaboration between humans and machines is not just a possibility, but a necessity. Understanding how these systems function is no longer reserved for computer scientists; it is becoming a fundamental skill for anyone navigating the digital landscape. The challenge lies in ensuring that these powerful tools are used to enhance human potential rather than replace it."),
-    ],
-    "hi": [
-        ("hi_1", "आज का मौसम बहुत सुहाना है। बच्चे पार्क में खेल रहे हैं।"),
-    ]
+    "en-US": {
+        "easy": [
+            ("en_e1", "The big brown dog ran to the park. He loves to play with the red ball."),
+            ("en_e2", "I have a cat named Luna. She sleeps on my bed all day long."),
+            ("en_e3", "The sun is very hot today. We should eat some cold ice cream."),
+            ("en_e4", "My school is near my house. I walk there with my best friend every morning."),
+            ("en_e5", "It is raining outside now. I need my umbrella and my yellow boots."),
+        ],
+        "medium": [
+            ("en_m1", "The weekend is finally here, and I am so excited to go hiking with my friends. We packed our bags with tasty snacks, water, and extra clothes just in case it rains. The trail leads up a high mountain where we hope to see beautiful birds and maybe even a deer. After the long hike, we plan to have a big picnic near the river."),
+            ("en_m2", "Cooking dinner can be a really fun activity if you have the right ingredients ready. First, you need to chop the fresh vegetables and heat up the pan with some olive oil. When the onions turn golden brown, you can add the spices and the main dish to the pot. The delicious smell of fresh food filling the kitchen makes everyone in the family hungry."),
+            ("en_m3", "Gardening is a hobby that requires patience and a lot of dedication. You must plant the seeds at the right time of year and water them consistently every single day. Watching a tiny green sprout grow into a tall, flowering plant gives you a wonderful sense of accomplishment. It reminds us that good things take time and care to grow properly."),
+        ],
+        "hard": [
+            ("en_h1", "The Amazon rainforest, often referred to as the 'lungs of the Earth,' plays a critical role in regulating the global climate. It covers approximately forty percent of the South American continent and houses an incredibly diverse ecosystem that includes millions of species of insects, plants, birds, and other forms of life, many of which are still unrecorded by science. This vast canopy of greenery absorbs massive amounts of carbon dioxide from the atmosphere, helping to mitigate the effects of climate change. However, rapid deforestation driven by agricultural expansion and illegal logging poses a severe threat to this delicate balance. If the forest continues to disappear at the current alarming rate, the consequences for global weather patterns and biodiversity could be irreversible, leading to a loss of natural resources that future generations might never be able to recover."),
+            ("en_h2", "The exploration of Mars has been a focal point of space agencies for decades, driven by the possibility that the Red Planet may have once harbored microbial life. Robotic rovers, such as Perseverance and Curiosity, have been tirelessly traversing the Martian surface, analyzing soil samples and capturing high-resolution images of the desolate landscape. These sophisticated machines are equipped with advanced scientific instruments designed to detect organic compounds and signs of ancient water flow. The data returned suggests that billions of years ago, Mars was a warmer, wetter world with river valleys and lake beds, much like Earth. Understanding why Mars lost its atmosphere and dried up is crucial, not only for piecing together the history of our solar system but also for preparing for future human missions where astronauts will have to survive in its harsh, unforgiving environment."),
+            ("en_h3", "Artificial Intelligence has rapidly evolved from a theoretical concept into a powerful tool that permeates nearly every aspect of modern society. By mimicking cognitive functions such as learning and problem-solving, AI systems can diagnose diseases with remarkable accuracy, optimize complex logistics networks, and even generate creative works of art. However, this technological leap brings with it significant ethical questions regarding privacy, algorithmic bias, and the potential displacement of jobs in various industries. As we integrate these intelligent systems further into our daily lives, it becomes imperative to establish robust regulations and ethical guidelines. Balancing innovation with social responsibility will be the defining challenge of the twenty-first century, ensuring that the benefits of artificial intelligence are shared equitably across all of humanity."),
+        ]
+    }
 }
-
 # --------------------
 # Utilities
 # --------------------
@@ -314,16 +325,27 @@ def process_audio(
         root_logger.removeHandler(memory_handler)
         
 @app.get("/get-passage/")
-def get_passage(language: str = "en"):
-    iso_lang = LANG_MAP.get(language.lower().strip(), "en")
-    if iso_lang not in PASSAGE_BANK:
-        iso_lang = "en"
+def get_passage(language: str = "en", difficulty: str = "easy"):
+    # Normalize language code
+    iso_lang = LANG_MAP.get(language.lower().strip(), "en-US")
     
-    pid, passage = random.choice(PASSAGE_BANK[iso_lang])
+    # Default to 'easy' if invalid difficulty provided
+    valid_difficulties = ["easy", "medium", "hard"]
+    if difficulty not in valid_difficulties:
+        difficulty = "easy"
+
+    # Fetch passage list
+    lang_data = PASSAGE_BANK.get(iso_lang, PASSAGE_BANK["en-US"])
+    passages = lang_data.get(difficulty, lang_data["easy"])
+    
+    # Pick a random one
+    data = random.choice(passages)
+    
     return {
         "language": iso_lang,
-        "passage_id": pid,
-        "passage": passage
+        "difficulty": difficulty,
+        "passage_id": data[0],
+        "passage": data[1]
     }
     
 @app.get("/tts/")
