@@ -52,11 +52,13 @@ def show_custom_toast(message, type="error"):
             <span>{message}</span>
         </div>
     """, unsafe_allow_html=True)
+
 load_css()
 
 # API Config (Using 127.0.0.1 to prevent Backend Down errors)
 BACKEND_URL = "http://127.0.0.1:8000/process-audio/"
 PASSAGE_URL = "http://127.0.0.1:8000/get-passage/"
+TTS_URL = "http://127.0.0.1:8000/tts/"
 
 LANGUAGES = {
     "English": "en",
@@ -239,6 +241,10 @@ def main():
 
     if "current_passage" not in st.session_state:
         st.session_state.current_passage = "Click 'New Passage' to start."
+    
+    # Initialize analysis_result in session state if not present
+    if "analysis_result" not in st.session_state:
+        st.session_state["analysis_result"] = None
 
     with col_btn:
         if st.button("🔄 New Passage", use_container_width=True):
@@ -247,6 +253,8 @@ def main():
                     r = requests.get(PASSAGE_URL, params={"language": lang_code}, timeout=3)
                     if r.status_code == 200:
                         st.session_state.current_passage = r.json()["passage"]
+                        # Clear old analysis when getting new passage
+                        st.session_state["analysis_result"] = None 
                         st.rerun()
                     else:
                         st.error("Server Error")
@@ -291,20 +299,19 @@ def main():
                 # --- NEW ERROR HANDLING WITH TOASTS ---
                 if response.status_code != 200:
                     try:
-                        # Try to get the clean message from backend (e.g., "Audio too short")
+                        # Try to get the clean message from backend
                         error_detail = response.json().get("detail", response.text)
                     except:
-                        # Fallback if backend didn't send JSON
+                        # Fallback
                         error_detail = f"Server Error ({response.status_code})"
                     
-                    # SHOW THE FADING POPUP
                     show_custom_toast(error_detail, type="error")
-                    st.stop() # Stop execution so we don't show empty graphs
+                    st.stop()
                 
-                # If successful...
-                result = response.json()
-                # Optional: Show success toast
+                # If successful, SAVE TO SESSION STATE
+                st.session_state["analysis_result"] = response.json()
                 show_custom_toast("Analysis Complete!", type="success")
+                st.rerun() # Rerun to refresh the UI with stored data
                 
             except Exception as e:
                 stop_event.set()
@@ -312,116 +319,147 @@ def main():
                 show_custom_toast(f"Connection Failed: {str(e)}", type="error")
                 st.stop()
 
-            # --- Results Display ---
-            st.divider()
+    # --- Results Display (Check Session State instead of local var) ---
+    if st.session_state["analysis_result"]:
+        result = st.session_state["analysis_result"]
+        
+        st.divider()
+        
+        # 1. EXTRACT METRICS
+        metrics = result.get("metrics", {})
+        alignment = result.get("word_alignment", [])
+        error_list = result.get("error_analysis", [])
+        logs = result.get("logs", [])
+        
+        # 2. CREATE TABS
+        t1, t2, t3, t4 = st.tabs(["📊 Summary", "🔍 Errors", "📖 Text", "💻 Logs"])
+
+        # 3. FILL SUMMARY TAB
+        with t1:
+            st.subheader("Performance Overview")
             
-            # 1. EXTRACT METRICS
-            metrics = result.get("metrics", {})
-            alignment = result.get("word_alignment", [])
-            error_list = result.get("error_analysis", [])
-            logs = result.get("logs", [])
+            # --- ROW 1: SUCCESS METRICS ---
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Overall Accuracy", f"{metrics.get('accuracy', 0)}%")
+            c2.metric("Fluency Score", f"{metrics.get('fluency', 0)}/100")
             
-            # 2. CREATE TABS (MUST BE DONE BEFORE 'with t1:')
-            t1, t2, t3, t4 = st.tabs(["📊 Summary", "🔍 Errors", "📖 Text", "💻 Logs"])
+            correct_n = metrics.get("correct_count", 0)
+            c3.markdown(f"""
+            <div class="metric-container card-correct">
+                <div class="metric-label">Words Read Perfectly</div>
+                <div class="metric-value">{correct_n}</div>
+                <div class="sub-metric">Keep it up!</div>
+            </div>""", unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # --- ROW 2: DETAILED BREAKDOWN ---
+            k1, k2, k3, k4 = st.columns(4)
+            
+            mis = metrics.get("mispronunciation_count", 0)
+            k1.markdown(f"""
+            <div class="metric-container card-mis">
+                <div class="metric-label">Mispronounced</div>
+                <div class="metric-value">{mis}</div>
+                <div class="sub-metric">Close attempts</div>
+            </div>""", unsafe_allow_html=True)
+            
+            sub = metrics.get("substitution_count", 0)
+            k2.markdown(f"""
+            <div class="metric-container card-wrong">
+                <div class="metric-label">Wrong Words</div>
+                <div class="metric-value">{sub}</div>
+                <div class="sub-metric">Try again</div>
+            </div>""", unsafe_allow_html=True)
+            
+            dele = metrics.get("deletion_count", 0)
+            k3.markdown(f"""
+            <div class="metric-container card-skip">
+                <div class="metric-label">Skipped</div>
+                <div class="metric-value">{dele}</div>
+                <div class="sub-metric">Missed</div>
+            </div>""", unsafe_allow_html=True)
+            
+            stut = metrics.get("stutter_count", 0)
+            k4.markdown(f"""
+            <div class="metric-container card-stutter">
+                <div class="metric-label">Stutters</div>
+                <div class="metric-value">{stut}</div>
+                <div class="sub-metric">Repeats</div>
+            </div>""", unsafe_allow_html=True)
 
-            # 3. FILL SUMMARY TAB
-            with t1:
-                st.subheader("Performance Overview")
-                
-                # --- ROW 1: SUCCESS METRICS ---
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Overall Accuracy", f"{metrics.get('accuracy', 0)}%")
-                c2.metric("Fluency Score", f"{metrics.get('fluency', 0)}/100")
-                
-                # Custom Green Card for "Correct Words"
-                correct_n = metrics.get("correct_count", 0)
-                c3.markdown(f"""
-                <div class="metric-container card-correct">
-                    <div class="metric-label">Words Read Perfectly</div>
-                    <div class="metric-value">{correct_n}</div>
-                    <div class="sub-metric">Keep it up!</div>
-                </div>""", unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # --- ROW 2: DETAILED BREAKDOWN (Colored Cards) ---
-                k1, k2, k3, k4 = st.columns(4)
-                
-                # 1. Mispronounced (Yellow)
-                mis = metrics.get("mispronunciation_count", 0)
-                k1.markdown(f"""
-                <div class="metric-container card-mis">
-                    <div class="metric-label">Mispronounced</div>
-                    <div class="metric-value">{mis}</div>
-                    <div class="sub-metric">Close attempts</div>
-                </div>""", unsafe_allow_html=True)
-                
-                # 2. Wrong Words (Red)
-                sub = metrics.get("substitution_count", 0)
-                k2.markdown(f"""
-                <div class="metric-container card-wrong">
-                    <div class="metric-label">Wrong Words</div>
-                    <div class="metric-value">{sub}</div>
-                    <div class="sub-metric">Try again</div>
-                </div>""", unsafe_allow_html=True)
-                
-                # 3. Skipped (Gray)
-                dele = metrics.get("deletion_count", 0)
-                k3.markdown(f"""
-                <div class="metric-container card-skip">
-                    <div class="metric-label">Skipped</div>
-                    <div class="metric-value">{dele}</div>
-                    <div class="sub-metric">Missed</div>
-                </div>""", unsafe_allow_html=True)
-                
-                # 4. Stutters (Orange)
-                stut = metrics.get("stutter_count", 0)
-                k4.markdown(f"""
-                <div class="metric-container card-stutter">
-                    <div class="metric-label">Stutters</div>
-                    <div class="metric-value">{stut}</div>
-                    <div class="sub-metric">Repeats</div>
-                </div>""", unsafe_allow_html=True)
+            # --- ROW 3: SPEEDOMETER (PACE) ---
+            st.markdown("<br>", unsafe_allow_html=True)
+            wpm = metrics.get('wpm', 0)
+            
+            display_wpm = min(wpm, 200)
+            marker_pos = (display_wpm / 200) * 100
+            
+            if wpm < 80: speed_text = "Slow"
+            elif wpm > 150: speed_text = "Fast"
+            else: speed_text = "Optimal"
 
-                # --- ROW 3: SPEEDOMETER (PACE) ---
-                st.markdown("<br>", unsafe_allow_html=True)
-                wpm = metrics.get('wpm', 0)
-                
-                # Logic: Cap at 200 WPM for the visual bar
-                display_wpm = min(wpm, 200)
-                marker_pos = (display_wpm / 200) * 100
-                
-                if wpm < 80: speed_text = "Slow"
-                elif wpm > 150: speed_text = "Fast"
-                else: speed_text = "Optimal"
-
-                st.markdown(f"""
-                <div class="speed-container">
-                    <div class="speed-header">
-                        <span class="speed-title">Speaking Pace</span>
-                        <span class="speed-value">{wpm} <span style="font-size:0.8em; color:#8b949e;">WPM</span></span>
-                    </div>
-                    <div class="speed-bar-wrapper">
-                        <div class="speed-bar-bg"></div>
-                        <div class="speed-marker" style="left: {marker_pos}%;"></div>
-                    </div>
-                    <div class="speed-labels">
-                        <span>Slow</span>
-                        <span>Optimal (110-150)</span>
-                        <span>Fast</span>
-                    </div>
+            st.markdown(f"""
+            <div class="speed-container">
+                <div class="speed-header">
+                    <span class="speed-title">Speaking Pace</span>
+                    <span class="speed-value">{wpm} <span style="font-size:0.8em; color:#8b949e;">WPM</span></span>
                 </div>
-                """, unsafe_allow_html=True)
+                <div class="speed-bar-wrapper">
+                    <div class="speed-bar-bg"></div>
+                    <div class="speed-marker" style="left: {marker_pos}%;"></div>
+                </div>
+                <div class="speed-labels">
+                    <span>Slow</span>
+                    <span>Optimal (110-150)</span>
+                    <span>Fast</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            with t2:
-                st.markdown(render_comparison_table(error_list), unsafe_allow_html=True)
+        # --- TAB 2: ERROR TABLE & PRACTICE ---
+        with t2:
+            st.subheader("Word-by-Word Analysis")
+            st.markdown(render_comparison_table(error_list), unsafe_allow_html=True)
+            
+            st.divider()
+            st.subheader("🎧 Practice Zone")
+            
+            practice_words = [e for e in error_list if e['type'] in ['mispronunciation', 'substitution']]
+            
+            if practice_words:
+                word_options = [f"{e['expected']} (You said: {e['actual']})" for e in practice_words]
+                
+                selected_option = st.selectbox("Select a word to practice:", word_options)
+                
+                if selected_option:
+                    target_word = selected_option.split(" (")[0]
+                    
+                    c1, c2 = st.columns([1, 3])
+                    with c1:
+                        if st.button(f"👂 Listen to '{target_word}'", use_container_width=True):
+                            try:
+                                params = {"text": target_word, "language": lang_code}
+                                r = requests.get(TTS_URL, params=params)
+                                
+                                if r.status_code == 200:
+                                    st.audio(r.content, format="audio/mp3")
+                                else:
+                                    st.error("Could not load audio.")
+                            except Exception as e:
+                                st.error(f"TTS Error: {e}")
+                    
+                    with c2:
+                        st.info(f"Tip: Listen closely to the difference. Try saying '{target_word}' slowly.")
+            else:
+                st.success("🌟 No specific words to practice! You read everything perfectly.")
 
-            with t3:
-                st.markdown(f"<div class='passage-box'>{render_highlighted_passage(alignment)}</div>", unsafe_allow_html=True)
+        with t3:
+            st.markdown(f"<div class='passage-box'>{render_highlighted_passage(alignment)}</div>", unsafe_allow_html=True)
 
-            with t4:
-                st.subheader("Backend Logs")
-                st.markdown(render_terminal_logs(logs), unsafe_allow_html=True)
+        with t4:
+            st.subheader("Backend Logs")
+            st.markdown(render_terminal_logs(logs), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()

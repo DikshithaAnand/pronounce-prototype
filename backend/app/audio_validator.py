@@ -1,51 +1,52 @@
 from pydub import AudioSegment
-from pydub.silence import detect_silence
+from pydub.silence import detect_nonsilent
 import logging
 
 logger = logging.getLogger(__name__)
 
 def validate_audio(file_path: str):
     """
-    Analyzes audio quality with DYSLEXIA-FRIENDLY tolerances.
+    Analyzes audio for presence of speech.
+    Strategy: Fixed Threshold. Anything louder than -40dB is considered 'Activity'.
     """
     try:
         audio = AudioSegment.from_file(file_path)
         
         # 1. DURATION CHECK
-        # Keep this small to catch accidental clicks
-        duration_sec = audio.duration_seconds
-        if duration_sec < 1.0:
-            return False, f"Recording too short ({round(duration_sec, 1)}s). Please keep reading."
+        if audio.duration_seconds < 0.5:
+            return False, "Recording too short."
 
-        # 2. VOLUME CHECK
-        # Rejection: Quieter than -50dBFS (Very faint/Whisper)
-        max_volume = audio.max_dBFS
-        if max_volume < -50.0:
+        # 2. DEAD MIC CHECK
+        # If the loudest sound is quieter than -50dB, the mic is probably dead/muted.
+        if audio.max_dBFS < -50.0:
             return False, "Volume too low. Please speak closer to the mic."
 
-        # 3. SILENCE CHECK (The Fix)
-        # Old Logic: 500ms pause = Silence.
-        # New Logic: 2000ms (2s) pause = Silence. 
-        # Anything shorter is considered "Thinking Time" (Active).
+        # 3. ACTIVITY CHECK (Fixed Threshold)
+        # We don't use 'peak - 16' anymore because accidental clicks break it.
+        # We look for ANY audio louder than -40dB (A quiet library level).
         
-        silence_thresh = max_volume - 20 # Be more generous with background noise
-        silent_ranges = detect_silence(
-            audio, 
-            min_silence_len=2000, # <--- CHANGED: Pauses under 2s are IGNORED
-            silence_thresh=silence_thresh
+        nonsilent_ranges = detect_nonsilent(
+            audio,
+            min_silence_len=500, # A gap must be 0.5s to break a chunk
+            silence_thresh=-40   # <--- FIXED THRESHOLD
         )
         
-        total_silence_ms = sum([(end - start) for start, end in silent_ranges])
-        total_duration_ms = len(audio)
-        silence_ratio = total_silence_ms / total_duration_ms
+        total_active_ms = sum([(end - start) for start, end in nonsilent_ranges])
+        total_active_sec = total_active_ms / 1000.0
+        
+        logger.info(f"🎤 Active Audio (> -40dB): {total_active_sec}s")
 
-        # Rejection: Only reject if >90% of the file is TOTAL silence (2s+ chunks)
-        if silence_ratio > 0.90:
-            return False, "No speech detected. Did you forget to speak?"
+        # As long as there is 0.5s of noise/speech, we let Whisper handle it.
+        if total_active_sec < 0.5:
+             # Fallback: If RMS (Average Energy) is decent, let it pass anyway.
+             if audio.dBFS > -45:
+                 logger.info("⚠️ Low activity detected, but average volume is okay. Accepting.")
+                 return True, None
+             
+             return False, "No clear speech detected."
 
         return True, None
 
     except Exception as e:
         logger.error(f"Validation Error: {e}")
-        # Fail open (allow processing) if validation crashes
-        return True, None
+        return True, None # Fail Open

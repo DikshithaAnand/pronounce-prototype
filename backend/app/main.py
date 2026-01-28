@@ -9,6 +9,7 @@ import shutil
 import random
 import logging
 from contextlib import asynccontextmanager
+from fastapi.responses import FileResponse
 
 # --- INTERNAL IMPORTS ---
 # 1. Model Loader (for pre-loading)
@@ -22,6 +23,8 @@ from backend.app.db.client import get_supabase_client  # <--- NEW: To connect on
 from backend.app.db.repo import save_attempt         # <--- NEW: To save data
 # 5 audio validation
 from backend.app.audio_validator import validate_audio
+# 6 tts
+from backend.app.tts_handler import generate_audio_file 
 # --------------------
 # LOGGING SETUP
 # --------------------
@@ -195,28 +198,10 @@ def process_audio(
         
         # Format Check
         raw_path = detect_and_rename(raw_path)
-        # Audio Validation
-        logger.info("🛡️ Running Audio Quality Checks...")
-        is_valid, error_msg = validate_audio(str(raw_path))
-        
-        if not is_valid:
-            logger.warning(f"❌ Audio Rejected: {error_msg}")
-            # This 400 Error will be caught by Frontend and shown as an Error Box
-            raise HTTPException(status_code=400, detail=error_msg)
-            
-        logger.info("✅ Audio passed quality check.")
-        # Audio Processing
+        #AUDIO PROCESSING
         logger.info("🔊 Decoding audio stream...")
         audio = AudioSegment.from_file(str(raw_path))
         
-        duration_sec = audio.duration_seconds
-        logger.info(f"⏱️  Audio Duration: {round(duration_sec, 2)}s")
-
-        if audio.max_dBFS == -float("inf"):
-            raise HTTPException(400, "Silent audio detected")
-        if duration_sec < 0.5:
-            raise HTTPException(400, "Audio too short (< 0.5s)")
-
         # Convert to 16kHz Mono WAV
         logger.info("🛠️  Transcoding to 16kHz Mono WAV...")
         clean_filename = f"clean_{int(time.time())}.wav"
@@ -224,6 +209,18 @@ def process_audio(
         
         audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
         audio.export(clean_path, format="wav")
+        
+        duration_sec = audio.duration_seconds
+        logger.info(f"⏱️  Audio Duration: {round(duration_sec, 2)}s")
+
+        # 3. VALIDATION (Run on the CLEAN WAV)
+        # Moved this AFTER conversion to avoid WebM bugs
+        logger.info("🛡️ Running Audio Quality Checks...")
+        is_valid, error_msg = validate_audio(str(clean_path)) # <--- Check clean_path
+        
+        if not is_valid:
+            logger.warning(f"❌ Audio Rejected: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
 
         # Call Scoring Engine
         logger.info("🧠 Invoking Hybrid Scoring Engine...")
@@ -323,3 +320,18 @@ def get_passage(language: str = "en"):
         "passage_id": pid,
         "passage": passage
     }
+    
+@app.get("/tts/")
+async def get_tts(text: str, language: str = "en"):
+    """
+    Returns an MP3 file of the text spoken in the requested language.
+    """
+    try:
+        # Generate the file
+        output_path = await generate_audio_file(text, language)
+        
+        # Return it as a downloadable file
+        return FileResponse(output_path, media_type="audio/mpeg", filename=f"tts_{text}.mp3")
+    except Exception as e:
+        logger.error(f"TTS Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

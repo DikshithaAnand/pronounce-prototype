@@ -39,3 +39,6 @@ psycopg2-binary
 alembic
 supabase
 python-dotenv
+
+#tts
+edge-tts
