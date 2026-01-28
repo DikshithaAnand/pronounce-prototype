@@ -47,3 +47,6 @@ extra-streamlit-components
 plotly
 pandas
 numpy
+
+matplotlib
+wordcloud

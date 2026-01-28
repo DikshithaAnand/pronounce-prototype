@@ -24,12 +24,14 @@ from backend.app.db.repo import (
     save_attempt, 
     fetch_dashboard_stats, 
     fetch_progress_history, 
-    fetch_error_distribution
+    fetch_error_distribution,
+    fetch_difficulty_stats
 )
 # 5 audio validation
 from backend.app.audio_validator import validate_audio
 # 6 tts
 from backend.app.tts_handler import generate_audio_file 
+from backend.app.helper_wordcloud import fetch_word_analysis
 # --------------------
 # LOGGING SETUP
 # --------------------
@@ -364,7 +366,10 @@ async def get_tts(text: str, language: str = "en"):
     except Exception as e:
         logger.error(f"TTS Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+
+# --- UPDATED ENDPOINT ---
 @app.get("/analytics/{user_id}")
 async def get_analytics(user_id: str):
     """
@@ -372,17 +377,24 @@ async def get_analytics(user_id: str):
     Aggregates stats, charts, and error distribution.
     """
     try:
-        # Fetch all components in parallel (conceptually)
+        # Fetch all components (now including the new word analysis)
         stats = fetch_dashboard_stats(user_id)
         history = fetch_progress_history(user_id)
         errors = fetch_error_distribution(user_id)
+        difficulty_data = fetch_difficulty_stats(user_id)
+        
+        # --- CALL THE NEW FUNCTION HERE ---
+        word_data = fetch_word_analysis(user_id) 
 
         return {
             "status": "success",
-            "stats": stats,        # {avg_wpm, avg_accuracy, total_attempts}
-            "history": history,    # List of attempts for Line Chart
-            "errors": errors       # {mispronunciation: 5, stutter: 2}
+            "stats": stats,            # {avg_wpm, avg_accuracy, total_attempts}
+            "history": history,        # List of attempts for Line Chart
+            "errors": errors,          # General pie chart data
+            "difficulty_analysis": difficulty_data,
+            "word_analysis": word_data # <--- NEW KEY FOR ROW 4
         }
     except Exception as e:
-        logger.error(f"Analytics Error: {e}")
+        # logger.error(f"Analytics Error: {e}") # Uncomment if you have logger setup
+        print(f"Analytics Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch analytics")

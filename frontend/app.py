@@ -11,6 +11,11 @@ from datetime import datetime, timedelta
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 import base64
 import extra_streamlit_components as stx
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+import pandas as pd
+import requests
 
 # --- AUTH IMPORT ---
 from auth_client import login, signup, logout
@@ -409,16 +414,34 @@ def render_dashboard():
 
     user_id = st.session_state["user"].id
     
-    # Fetch Data
+    # 1. FETCH DATA
     with st.spinner("Loading history..."):
         try:
             r = requests.get(f"{ANALYTICS_URL}{user_id}")
             if r.status_code == 200:
                 payload = r.json()
-                # UNPACK THE NEW BACKEND STRUCTURE
+                
+                # Unpack Data
                 stats = payload.get("stats", {})
                 history = payload.get("history", [])
                 error_dist = payload.get("errors", {})
+                
+                # New Difficulty Data
+                diff_analysis = payload.get("difficulty_analysis", {})
+                diff_avgs = diff_analysis.get("averages", {})
+                diff_raw = diff_analysis.get("raw", [])
+
+                # --- NEW: Unpack Word-Level Error Data ---
+                # Ensure your backend sends this key 'word_analysis'
+                # Structure expected: 
+                # {
+                #   'word': ['the', 'rabbit', ...],
+                #   'mispronounced': [2, 15, ...],
+                #   'stuttered': [1, 5, ...],
+                #   'wrong': [0, 2, ...]
+                # }
+                word_analysis = payload.get("word_analysis", {}) 
+                
             else:
                 st.error("Failed to fetch analytics.")
                 return
@@ -430,72 +453,208 @@ def render_dashboard():
         st.info("No practice sessions found yet. Go to 'Practice Mode' and record your first session!")
         return
 
-    # --- 1. TOP CARDS (Big Stats) ---
+    # --- TOP CARDS (Big Stats) ---
     st.divider()
-    
-    # Use the pre-calculated stats from backend
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Sessions", stats.get("total_attempts", 0))
     c2.metric("Avg Accuracy", f"{stats.get('avg_accuracy', 0)}%")
     c3.metric("Avg WPM", f"{stats.get('avg_wpm', 0)}")
 
-    # --- 2. PREPARE HISTORY DATA ---
-    df = pd.DataFrame(history)
-    if not df.empty:
-        df['created_at'] = pd.to_datetime(df['created_at'])
-        df = df.sort_values('created_at')
+    st.divider()
 
-        # --- LINE CHART: Performance Trends ---
-        st.subheader("📊 Performance Over Time")
-        
-        tab_wpm, tab_acc = st.tabs(["⚡ Speed (WPM)", "🎯 Accuracy"])
-        
-        with tab_wpm:
-            fig_wpm = px.line(df, x='created_at', y='wpm', markers=True, 
-                              title="Words Per Minute Trend",
-                              line_shape="spline",
-                              labels={'wpm': 'Speed (WPM)', 'created_at': 'Date'})
-            fig_wpm.update_traces(line_color='#3498db')
-            # FIX: width="stretch"
-            st.plotly_chart(fig_wpm, width="stretch")
+    # ==========================================
+    #  ROW 1: DIFFICULTY DIAGNOSTICS
+    # ==========================================
+    st.subheader("🧩 Row 1: The Difficulty Gap")
+    st.caption("Compare your performance across Easy, Medium, and Hard passages.")
 
-        with tab_acc:
-            fig_acc = px.line(df, x='created_at', y=['accuracy_score', 'fluency_score'], markers=True,
-                              title="Accuracy & Fluency Trends",
-                              line_shape="spline")
-            # FIX: width="stretch"
-            st.plotly_chart(fig_acc, width="stretch")
+    if diff_raw:
+        r1_c1, r1_c2 = st.columns(2)
 
-    # --- 3. PIE CHART: Error Distribution ---
-    st.subheader("🚧 Error Breakdown")
-    
-    if error_dist:
-        err_df = pd.DataFrame(list(error_dist.items()), columns=['Error Type', 'Count'])
-        
-        c_chart, c_text = st.columns([2, 1])
-        
-        with c_chart:
-            fig_pie = px.pie(err_df, values='Count', names='Error Type', 
-                             title="Distribution of Mistakes",
-                             hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
-            # FIX: width="stretch"
-            st.plotly_chart(fig_pie, width="stretch")
-            
-        with c_text:
-            st.markdown("### Top Issues")
-            sorted_errors = sorted(error_dist.items(), key=lambda x: x[1], reverse=True)
-            for e_type, count in sorted_errors:
-                st.write(f"**{e_type.title()}**: {count} times")
+        # --- GRAPH 1.1: Challenge Gap (Bar Chart) ---
+        with r1_c1:
+            chart_data = [
+                {"Level": "Easy", "Accuracy": diff_avgs.get("easy", 0)},
+                {"Level": "Medium", "Accuracy": diff_avgs.get("medium", 0)},
+                {"Level": "Hard", "Accuracy": diff_avgs.get("hard", 0)}
+            ]
+            fig_gap = px.bar(
+                chart_data, x="Level", y="Accuracy", color="Level",
+                title="Accuracy by Difficulty", text="Accuracy",
+                color_discrete_map={"Easy": "#2ecc71", "Medium": "#f1c40f", "Hard": "#e74c3c"}
+            )
+            fig_gap.update_traces(texttemplate='%{text}%', textposition='outside')
+            fig_gap.update_yaxes(range=[0, 110])
+            st.plotly_chart(fig_gap, use_container_width=True)
+
+        # --- GRAPH 1.2: Stamina Check (Box Plot) ---
+        with r1_c2:
+            df_raw = pd.DataFrame(diff_raw)
+            if not df_raw.empty:
+                # Normalize difficulty strings
+                df_raw['difficulty'] = df_raw['difficulty'].fillna('easy').str.capitalize()
+                
+                fig_stam = px.box(
+                    df_raw, x="difficulty", y="wpm", color="difficulty",
+                    title="Reading Speed (WPM) vs Difficulty",
+                    category_orders={"difficulty": ["Easy", "Medium", "Hard"]},
+                    color_discrete_map={"Easy": "#2ecc71", "Medium": "#f1c40f", "Hard": "#e74c3c"}
+                )
+                st.plotly_chart(fig_stam, use_container_width=True)
     else:
-        st.success("No significant errors recorded in your history yet!")
+        st.info("Complete more sessions to unlock Difficulty Analysis.")
 
-    # --- 4. RECENT HISTORY TABLE ---
-    st.subheader("📜 Recent Sessions")
-    display_df = df[['created_at', 'accuracy_score', 'wpm', 'fluency_score']].sort_values('created_at', ascending=False).head(10)
-    # FIX: width="stretch"
-    st.dataframe(display_df, width="stretch")
+    st.divider()
 
+    # ==========================================
+    #  ROW 2: LEARNING DYNAMICS
+    # ==========================================
+    st.subheader("🧠 Row 2: Learning Dynamics")
+    
+    r2_c1, r2_c2 = st.columns(2)
+
+    # --- GRAPH 2.1: The Fluency Matrix (Scatter) ---
+    with r2_c1:
+        if diff_raw:
+            df_matrix = pd.DataFrame(diff_raw)
+            df_matrix['difficulty'] = df_matrix['difficulty'].fillna('easy').str.capitalize()
+            
+            fig_matrix = px.scatter(
+                df_matrix, x="accuracy_score", y="wpm", color="difficulty",
+                title="Fluency Matrix (Speed vs Accuracy)",
+                labels={"accuracy_score": "Accuracy (%)", "wpm": "Speed (WPM)"},
+                size_max=15,
+                color_discrete_map={"Easy": "#2ecc71", "Medium": "#f1c40f", "Hard": "#e74c3c"}
+            )
+            # Add quadrants reference lines
+            fig_matrix.add_hline(y=100, line_dash="dot", annotation_text="Target Speed")
+            fig_matrix.add_vline(x=90, line_dash="dot", annotation_text="Target Acc.")
+            st.plotly_chart(fig_matrix, use_container_width=True)
+        else:
+            st.write("Not enough data for Fluency Matrix.")
+
+    # --- GRAPH 2.2: Performance Trend (Line Chart) ---
+    with r2_c2:
+        df_hist = pd.DataFrame(history)
+        if not df_hist.empty:
+            df_hist['created_at'] = pd.to_datetime(df_hist['created_at'])
+            df_hist = df_hist.sort_values('created_at')
+            
+            fig_trend = px.line(
+                df_hist, x='created_at', y=['accuracy_score', 'wpm'], 
+                title="Overall Progress Trend", markers=True,
+                labels={'value': 'Score', 'created_at': 'Date', 'variable': 'Metric'}
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+    st.divider()
+
+    # ==========================================
+    #  ROW 3: ERROR BREAKDOWN & LOGS
+    # ==========================================
+    st.subheader("🕵️ Row 3: Error Analysis")
+
+    r3_c1, r3_c2 = st.columns([1, 2])
+
+    # --- GRAPH 3.1: Error Distribution (Pie) ---
+    with r3_c1:
+        if error_dist:
+            err_df = pd.DataFrame(list(error_dist.items()), columns=['Error Type', 'Count'])
+            fig_pie = px.pie(
+                err_df, values='Count', names='Error Type', 
+                title="Error Types", hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.success("No errors found!")
+
+    # --- GRAPH 3.2: Recent History (Table) ---
+    with r3_c2:
+        st.markdown("##### 📜 Recent Sessions")
+        if not df_hist.empty:
+            display_df = df_hist[['created_at', 'accuracy_score', 'wpm', 'fluency_score']].sort_values('created_at', ascending=False).head(5)
+            st.dataframe(display_df, use_container_width=True)
+
+    st.divider()
+
+    # ==========================================
+    #  ROW 4: ERROR PATTERN RECOGNITION (NEW)
+    # ==========================================
+    st.subheader("🔍 Row 4: Specific Word Struggles")
+    st.caption("Visualizing specific words that cause frequent stumbles.")
+
+    # Check if we have word analysis data
+    if word_analysis and len(word_analysis.get('word', [])) > 0:
+        r4_c1, r4_c2 = st.columns([1, 1.5])
+        
+        # Convert dictionary to DataFrame for easier handling
+        df_words = pd.DataFrame(word_analysis)
+        
+        # Calculate Total Errors per word
+        if 'mispronounced' in df_words.columns and 'stuttered' in df_words.columns and 'wrong' in df_words.columns:
+             df_words['total_errors'] = df_words['mispronounced'] + df_words['stuttered'] + df_words['wrong']
+        else:
+             # Fallback if specific columns missing
+             df_words['total_errors'] = 0
+
+        # --- GRAPH 4.1: Stumble Cloud (Word Cloud) ---
+        with r4_c1:
+            st.markdown("##### ☁️ Stumble Cloud")
+            if not df_words.empty:
+                # Create dictionary {word: total_errors}
+                word_freq = dict(zip(df_words['word'], df_words['total_errors']))
+                
+                # Generate WordCloud
+                # Using 'magma' colormap for high contrast
+                wc = WordCloud(width=400, height=400, background_color='white', colormap='magma').generate_from_frequencies(word_freq)
+                
+                # Plot using Matplotlib
+                fig_wc, ax = plt.subplots()
+                ax.imshow(wc, interpolation='bilinear')
+                ax.axis('off')
+                st.pyplot(fig_wc)
+            else:
+                st.info("Not enough word data for cloud.")
+
+        # --- GRAPH 4.2: Top 5 Friction Words (Grouped Bar) ---
+        with r4_c2:
+            st.markdown("##### 📊 Top 5 Problem Words")
+            if not df_words.empty:
+                # Sort by total errors and take top 5
+                df_sorted = df_words.sort_values(by='total_errors', ascending=False).head(5)
+                
+                fig_detailed = go.Figure()
+
+                # Trace 1: Mispronounced (Purple)
+                fig_detailed.add_trace(go.Bar(
+                    x=df_sorted['word'], y=df_sorted.get('mispronounced', []),
+                    name='Mispronounced', marker_color='mediumpurple'
+                ))
+
+                # Trace 2: Stuttered (Orange)
+                fig_detailed.add_trace(go.Bar(
+                    x=df_sorted['word'], y=df_sorted.get('stuttered', []),
+                    name='Stuttered', marker_color='orange'
+                ))
+
+                # Trace 3: Wrong (Red)
+                fig_detailed.add_trace(go.Bar(
+                    x=df_sorted['word'], y=df_sorted.get('wrong', []),
+                    name='Wrong', marker_color='crimson'
+                ))
+
+                fig_detailed.update_layout(
+                    barmode='group',
+                    xaxis_title="Word",
+                    yaxis_title="Count",
+                    legend_title="Error Type",
+                    height=400,
+                    margin=dict(l=20, r=20, t=20, b=20)
+                )
+                st.plotly_chart(fig_detailed, use_container_width=True)
+    else:
+        st.info("Practice more to generate word-level analysis!")
 # -----------------------------
 # 5. MAIN ENTRY POINT
 # -----------------------------

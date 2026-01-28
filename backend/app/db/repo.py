@@ -149,3 +149,50 @@ def fetch_error_distribution(user_name: str):
     except Exception as e:
         logger.error(f"Error fetching error distribution: {e}")
         return {}
+    
+# --- Add this to the READ OPERATIONS section ---
+
+def fetch_difficulty_stats(user_name: str):
+    """
+    Fetches stats grouped by difficulty for the 'Challenge Gap' and 'Stamina' charts.
+    """
+    client = get_supabase_client()
+    if not client: return {}
+
+    try:
+        # Fetch difficulty, accuracy, and wpm for all attempts
+        response = client.table("attempts")\
+            .select("difficulty, accuracy_score, wpm, created_at")\
+            .eq("user_name", user_name)\
+            .order("created_at", desc=True)\
+            .execute()
+            
+        data = response.data
+        if not data:
+            return {"grouped": {}, "raw": []}
+
+        # 1. Calculate Averages for the Bar Chart
+        # Structure: {'easy': {'acc': 90, 'count': 5}, 'medium': ...}
+        grouped = {"easy": [], "medium": [], "hard": []}
+        
+        for d in data:
+            diff = d.get("difficulty", "easy") or "easy" # handle None
+            if diff in grouped:
+                grouped[diff].append(d["accuracy_score"])
+        
+        # Compute means
+        averages = {}
+        for level, scores in grouped.items():
+            if scores:
+                averages[level] = round(sum(scores) / len(scores), 1)
+            else:
+                averages[level] = 0
+
+        return {
+            "averages": averages, # For Bar Chart {easy: 95, medium: 80...}
+            "raw": data           # For Box Plot (lists of all attempts)
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching difficulty stats: {e}")
+        return {"averages": {}, "raw": []}
