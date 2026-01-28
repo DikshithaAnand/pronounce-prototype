@@ -1,7 +1,12 @@
 import logging
+from collections import Counter
 from backend.app.db.client import get_supabase_client
 
 logger = logging.getLogger(__name__)
+
+# ==========================================
+#  WRITE OPERATIONS (Existing & Preserved)
+# ==========================================
 
 def save_attempt(user_name: str, target_text: str, metrics: dict, error_report: list):
     """
@@ -55,3 +60,93 @@ def save_attempt(user_name: str, target_text: str, metrics: dict, error_report: 
     except Exception as e:
         logger.error(f"🔥 Database Save Error: {e}")
         return None
+
+# ==========================================
+#  READ OPERATIONS (New for Dashboard)
+# ==========================================
+
+def fetch_dashboard_stats(user_name: str):
+    """
+    Returns 'Big Number' cards: Avg WPM, Total Attempts, Best Accuracy.
+    """
+    client = get_supabase_client()
+    if not client: return {}
+
+    try:
+        response = client.table("attempts")\
+            .select("wpm, accuracy_score")\
+            .eq("user_name", user_name)\
+            .execute()
+            
+        data = response.data
+        if not data:
+            return {"avg_wpm": 0, "avg_accuracy": 0, "total_attempts": 0}
+
+        total = len(data)
+        avg_wpm = sum(d['wpm'] for d in data) / total
+        avg_acc = sum(d['accuracy_score'] for d in data) / total
+
+        return {
+            "avg_wpm": round(avg_wpm, 1),
+            "avg_accuracy": round(avg_acc, 1),
+            "total_attempts": total
+        }
+    except Exception as e:
+        logger.error(f"Error fetching summary: {e}")
+        return {"avg_wpm": 0, "avg_accuracy": 0, "total_attempts": 0}
+
+def fetch_progress_history(user_name: str, limit: int = 10):
+    """
+    Returns data for the Line Chart (Timeline of improvement).
+    """
+    client = get_supabase_client()
+    if not client: return []
+
+    try:
+        response = client.table("attempts")\
+            .select("created_at, wpm, accuracy_score, fluency_score")\
+            .eq("user_name", user_name)\
+            .order("created_at", desc=True)\
+            .limit(limit)\
+            .execute()
+        
+        # Reverse so it flows Left (Old) -> Right (New) on the chart
+        return response.data[::-1] if response.data else []
+    except Exception as e:
+        logger.error(f"Error fetching progress: {e}")
+        return []
+
+def fetch_error_distribution(user_name: str):
+    """
+    Returns data for the Pie Chart (Types of errors made).
+    """
+    client = get_supabase_client()
+    if not client: return {}
+
+    try:
+        # 1. Get recent attempts by this user
+        attempts_resp = client.table("attempts")\
+            .select("id")\
+            .eq("user_name", user_name)\
+            .order("created_at", desc=True)\
+            .limit(50)\
+            .execute()
+            
+        if not attempts_resp.data:
+            return {}
+
+        attempt_ids = [a['id'] for a in attempts_resp.data]
+
+        # 2. Get errors linked to those attempts
+        errors_resp = client.table("attempt_errors")\
+            .select("error_type")\
+            .in_("attempt_id", attempt_ids)\
+            .execute()
+
+        # 3. Count them (e.g., {'mispronunciation': 12, 'stutter': 4})
+        error_counts = Counter(item['error_type'] for item in errors_resp.data)
+        return dict(error_counts)
+
+    except Exception as e:
+        logger.error(f"Error fetching error distribution: {e}")
+        return {}

@@ -20,7 +20,12 @@ from backend.app.hybrid_scoring import compute_per_word_scores
 from backend.app.scoring_utils import generate_analysis_report
 # 4. Database Modules (Supabase)
 from backend.app.db.client import get_supabase_client  # <--- NEW: To connect on startup
-from backend.app.db.repo import save_attempt         # <--- NEW: To save data
+from backend.app.db.repo import (
+    save_attempt, 
+    fetch_dashboard_stats, 
+    fetch_progress_history, 
+    fetch_error_distribution
+)
 # 5 audio validation
 from backend.app.audio_validator import validate_audio
 # 6 tts
@@ -335,3 +340,25 @@ async def get_tts(text: str, language: str = "en"):
     except Exception as e:
         logger.error(f"TTS Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/analytics/{user_id}")
+async def get_analytics(user_id: str):
+    """
+    Endpoint for the Dashboard to fetch user history.
+    Aggregates stats, charts, and error distribution.
+    """
+    try:
+        # Fetch all components in parallel (conceptually)
+        stats = fetch_dashboard_stats(user_id)
+        history = fetch_progress_history(user_id)
+        errors = fetch_error_distribution(user_id)
+
+        return {
+            "status": "success",
+            "stats": stats,        # {avg_wpm, avg_accuracy, total_attempts}
+            "history": history,    # List of attempts for Line Chart
+            "errors": errors       # {mispronunciation: 5, stutter: 2}
+        }
+    except Exception as e:
+        logger.error(f"Analytics Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch analytics")

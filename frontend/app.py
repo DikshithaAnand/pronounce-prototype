@@ -4,9 +4,12 @@ import time
 import threading
 import itertools
 import textwrap
+import pandas as pd
+import plotly.express as px
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit.runtime.scriptrunner import add_script_run_ctx
+import base64
 
 # --- AUTH IMPORT ---
 from auth_client import login, signup, logout
@@ -17,35 +20,20 @@ from auth_client import login, signup, logout
 
 st.set_page_config(
     page_title="Pronounce AI",
-    layout="centered",
-    initial_sidebar_state="collapsed"
+    layout="wide",  # WIDE layout for Dashboard
+    initial_sidebar_state="expanded"
 )
 
 # Load External CSS
 def load_css():
-    # Try finding the file relative to this script
     css_path = Path(__file__).parent / "style.css"
-    
     if css_path.exists():
         with open(css_path, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    else:
-        # Fallback: Try looking in the local directory
-        fallback_path = Path("frontend/style.css")
-        if fallback_path.exists():
-             with open(fallback_path, "r", encoding="utf-8") as f:
-                st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-        else:
-            st.error(f"⚠️ CSS File not found at: {css_path}")
-            
+
 def show_custom_toast(message, type="error"):
-    """
-    Injects a temporary centered popup notification.
-    """
     icon = "⚠️" if type == "error" else "🎉"
     css_class = "toast-error" if type == "error" else "toast-success"
-    
-    # We use st.markdown with unsafe_allow_html to inject the div
     st.markdown(f"""
         <div class="toast-container {css_class}">
             <span style="font-size: 1.5rem;">{icon}</span>
@@ -55,10 +43,11 @@ def show_custom_toast(message, type="error"):
 
 load_css()
 
-# API Config (Using 127.0.0.1 to prevent Backend Down errors)
+# API Config
 BACKEND_URL = "http://127.0.0.1:8000/process-audio/"
 PASSAGE_URL = "http://127.0.0.1:8000/get-passage/"
 TTS_URL = "http://127.0.0.1:8000/tts/"
+ANALYTICS_URL = "http://127.0.0.1:8000/analytics/"
 
 LANGUAGES = {
     "English": "en",
@@ -70,46 +59,48 @@ LANGUAGES = {
 }
 
 # -----------------------------
-# 1. AUTHENTICATION SCREENS
+# 1. AUTHENTICATION
 # -----------------------------
 
 def show_login_page():
-    st.markdown("<h1 style='text-align: center;'>🔐 Login to Pronounce</h1>", unsafe_allow_html=True)
-    
-    tab1, tab2 = st.tabs(["Login", "Sign Up"])
-    
-    with tab1:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pass")
-        if st.button("Login", use_container_width=True):
-            with st.spinner("Logging in..."):
-                user, error = login(email, password)
-                if user:
-                    st.session_state["user"] = user
-                    st.success("Welcome back!")
-                    st.rerun()
-                else:
-                    st.error(f"Error: {error}")
+    c1, c2, c3 = st.columns([1,2,1])
+    with c2:
+        st.markdown("<h1 style='text-align: center;'>🔐 Login to Pronounce</h1>", unsafe_allow_html=True)
+        tab1, tab2 = st.tabs(["Login", "Sign Up"])
+        
+        with tab1:
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Password", type="password", key="login_pass")
+            # FIX: width="stretch"
+            if st.button("Login", width="stretch"):
+                with st.spinner("Logging in..."):
+                    user, error = login(email, password)
+                    if user:
+                        st.session_state["user"] = user
+                        st.success("Welcome back!")
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {error}")
 
-    with tab2:
-        new_email = st.text_input("Email", key="signup_email")
-        new_password = st.text_input("Password", type="password", key="signup_pass")
-        if st.button("Create Account", use_container_width=True):
-            with st.spinner("Creating account..."):
-                user, error = signup(new_email, new_password)
-                if user:
-                    st.success("Account created! You are logged in.")
-                    st.session_state["user"] = user
-                    st.rerun()
-                else:
-                    st.error(f"Error: {error}")
+        with tab2:
+            new_email = st.text_input("Email", key="signup_email")
+            new_password = st.text_input("Password", type="password", key="signup_pass")
+            # FIX: width="stretch"
+            if st.button("Create Account", width="stretch"):
+                with st.spinner("Creating account..."):
+                    user, error = signup(new_email, new_password)
+                    if user:
+                        st.success("Account created!")
+                        st.session_state["user"] = user
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {error}")
 
 # -----------------------------
 # 2. HELPER FUNCTIONS
 # -----------------------------
 
 def render_comparison_table(error_list):
-    """Renders the detailed error comparison table."""
     if not error_list:
         return "<div class='metric-success' style='padding:10px; text-align:center;'>🎉 Perfect Reading! Zero errors.</div>"
 
@@ -149,9 +140,9 @@ def render_comparison_table(error_list):
 def render_highlighted_passage(alignment_data):
     html_parts = []
     for item in alignment_data:
+        status = item.get("status", "unknown")
         target = item.get("target", "")
         recognized = item.get("recognized", "")
-        status = item.get("status", "unknown")
         
         if status == "correct":
             html_parts.append(f"<span class='word-correct'>{target}</span>")
@@ -169,37 +160,16 @@ def render_highlighted_passage(alignment_data):
     return " ".join(html_parts)
 
 def render_terminal_logs(logs):
-    """Generates the Hacker-style Terminal HTML."""
     if not logs: return ""
-
     log_lines = ""
     for log in logs:
         ts = log.get('timestamp')
-        if ts:
-            ts_str = datetime.fromtimestamp(ts).strftime('%H:%M:%S')
-        else:
-            ts_str = datetime.now().strftime('%H:%M:%S')
-
+        ts_str = datetime.fromtimestamp(ts).strftime('%H:%M:%S') if ts else datetime.now().strftime('%H:%M:%S')
         lvl = log.get('level', 'INFO')
         msg = log.get('message', '')
-        
-        log_lines += f"""<div class="log-entry">
-            <span class="log-timestamp">[{ts_str}]</span>
-            <span class="log-{lvl}">{lvl}</span>
-            <span class="log-message">{msg}</span>
-        </div>"""
+        log_lines += f"""<div class="log-entry"><span class="log-timestamp">[{ts_str}]</span><span class="log-{lvl}">{lvl}</span><span class="log-message">{msg}</span></div>"""
 
-    return textwrap.dedent(f"""
-    <div class="terminal-window">
-        <div class="terminal-header">
-            <div class="terminal-title">system_logs — bash</div>
-        </div>
-        <div class="terminal-body">
-            {log_lines}
-            <div style="color: #3fb950; margin-top: 5px;">➜ root@backend: _</div>
-        </div>
-    </div>
-    """)
+    return f"""<div class="terminal-window"><div class="terminal-header"><div class="terminal-title">system_logs — bash</div></div><div class="terminal-body">{log_lines}<div style="color: #3fb950; margin-top: 5px;">➜ root@backend: _</div></div></div>"""
 
 def cycle_status_messages(placeholder, stop_event):
     messages = ["👂 Listening...", "✨ Analyzing...", "🐢 Checking pace...", "🌟 Formatting results..."]
@@ -207,53 +177,33 @@ def cycle_status_messages(placeholder, stop_event):
         if stop_event.is_set(): break
         placeholder.markdown(f"<h3 style='text-align: center; color: #8b949e;'>{msg}</h3>", unsafe_allow_html=True)
         time.sleep(1.5)
+        
+def autoplay_audio(audio_bytes):
+            import base64
+            b64 = base64.b64encode(audio_bytes).decode()
+            md = f"""
+                <audio autoplay style="display:none;">
+                <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+                </audio>
+            """
+            st.markdown(md, unsafe_allow_html=True)
 
 # -----------------------------
-# 3. MAIN APP LOGIC
+# 3. PRACTICE MODE (Main App)
 # -----------------------------
+def render_practice_mode(lang_code):
+    st.title("🎤 Practice Studio")
+    st.caption("Read aloud and get instant feedback.")
 
-def main():
-    # --- AUTH CHECK ---
-    if "user" not in st.session_state:
-        st.session_state["user"] = None
-
-    if not st.session_state["user"]:
-        show_login_page()
-        return  # Stop here if not logged in
-
-    # --- MAIN DASHBOARD (Only visible if logged in) ---
-    user_email = st.session_state["user"].email
-    
-    with st.sidebar:
-        st.caption(f"Logged in as:")
-        st.write(f"👤 **{user_email}**")
-        if st.button("Logout", use_container_width=True):
-            logout()
-
-    st.title("🗣️ Pronounce")
-    st.caption("Ready to practice?")
-
-    # --- Control Bar ---
-    col_lang, col_btn = st.columns([3, 1])
-    with col_lang:
-        selected_language = st.selectbox("Select Language", list(LANGUAGES.keys()))
-        lang_code = LANGUAGES[selected_language]
-
-    if "current_passage" not in st.session_state:
-        st.session_state.current_passage = "Click 'New Passage' to start."
-    
-    # Initialize analysis_result in session state if not present
-    if "analysis_result" not in st.session_state:
-        st.session_state["analysis_result"] = None
-
+    col_btn, col_empty = st.columns([1, 3])
     with col_btn:
-        if st.button("🔄 New Passage", use_container_width=True):
+        # FIX: width="stretch"
+        if st.button("🔄 New Passage", width="stretch"):
             try:
                 with st.spinner("Fetching text..."):
                     r = requests.get(PASSAGE_URL, params={"language": lang_code}, timeout=3)
                     if r.status_code == 200:
                         st.session_state.current_passage = r.json()["passage"]
-                        # Clear old analysis when getting new passage
                         st.session_state["analysis_result"] = None 
                         st.rerun()
                     else:
@@ -261,28 +211,31 @@ def main():
             except Exception:
                 st.error("Backend Down")
 
-    # Text Area
+    if "current_passage" not in st.session_state:
+        st.session_state.current_passage = "Click 'New Passage' to start."
+    
+    if "analysis_result" not in st.session_state:
+        st.session_state["analysis_result"] = None
+
     text_len = len(st.session_state.current_passage)
     dynamic_height = max(150, int(text_len / 2.5))
     target_text = st.text_area("Read this:", value=st.session_state.current_passage, height=dynamic_height)
 
-    # --- Audio Input ---
     audio_data = st.audio_input("Record your voice")
 
     if audio_data:
         st.audio(audio_data)
         
-        if st.button("Analyze Reading", type="primary", use_container_width=True):
+        # FIX: width="stretch"
+        if st.button("Analyze Reading", type="primary", width="stretch"):
             audio_data.seek(0)
             files = {"file": ("recording.webm", audio_data, "audio/webm")}
-            
             data = {
                 "target_text": target_text, 
                 "language": lang_code, 
                 "user_id": st.session_state["user"].id
             }
             
-            # Loading Animation
             status_placeholder = st.empty()
             stop_event = threading.Event()
             loader_thread = threading.Thread(target=cycle_status_messages, args=(status_placeholder, stop_event))
@@ -291,27 +244,19 @@ def main():
             
             try:
                 response = requests.post(BACKEND_URL, files=files, data=data, timeout=60)
-                
                 stop_event.set()
                 loader_thread.join()
                 status_placeholder.empty()
                 
-                # --- NEW ERROR HANDLING WITH TOASTS ---
                 if response.status_code != 200:
-                    try:
-                        # Try to get the clean message from backend
-                        error_detail = response.json().get("detail", response.text)
-                    except:
-                        # Fallback
-                        error_detail = f"Server Error ({response.status_code})"
-                    
+                    try: error_detail = response.json().get("detail", response.text)
+                    except: error_detail = f"Server Error ({response.status_code})"
                     show_custom_toast(error_detail, type="error")
                     st.stop()
                 
-                # If successful, SAVE TO SESSION STATE
                 st.session_state["analysis_result"] = response.json()
                 show_custom_toast("Analysis Complete!", type="success")
-                st.rerun() # Rerun to refresh the UI with stored data
+                st.rerun()
                 
             except Exception as e:
                 stop_event.set()
@@ -319,147 +264,238 @@ def main():
                 show_custom_toast(f"Connection Failed: {str(e)}", type="error")
                 st.stop()
 
-    # --- Results Display (Check Session State instead of local var) ---
+    # --- RESULTS DISPLAY ---
     if st.session_state["analysis_result"]:
         result = st.session_state["analysis_result"]
-        
-        st.divider()
-        
-        # 1. EXTRACT METRICS
         metrics = result.get("metrics", {})
         alignment = result.get("word_alignment", [])
         error_list = result.get("error_analysis", [])
         logs = result.get("logs", [])
         
-        # 2. CREATE TABS
-        t1, t2, t3, t4 = st.tabs(["📊 Summary", "🔍 Errors", "📖 Text", "💻 Logs"])
+        t1, t2, t3, t4, t5 = st.tabs(["📊 Summary", "🔍 Errors", "🎧 Practice Zone", "📖 Text", "💻 Logs"])
 
-        # 3. FILL SUMMARY TAB
         with t1:
             st.subheader("Performance Overview")
-            
-            # --- ROW 1: SUCCESS METRICS ---
             c1, c2, c3 = st.columns(3)
             c1.metric("Overall Accuracy", f"{metrics.get('accuracy', 0)}%")
             c2.metric("Fluency Score", f"{metrics.get('fluency', 0)}/100")
-            
-            correct_n = metrics.get("correct_count", 0)
-            c3.markdown(f"""
-            <div class="metric-container card-correct">
-                <div class="metric-label">Words Read Perfectly</div>
-                <div class="metric-value">{correct_n}</div>
-                <div class="sub-metric">Keep it up!</div>
-            </div>""", unsafe_allow_html=True)
+            c3.markdown(f"<div class='metric-container card-correct'><div class='metric-label'>Words Read Perfectly</div><div class='metric-value'>{metrics.get('correct_count', 0)}</div></div>", unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # --- ROW 2: DETAILED BREAKDOWN ---
             k1, k2, k3, k4 = st.columns(4)
-            
-            mis = metrics.get("mispronunciation_count", 0)
-            k1.markdown(f"""
-            <div class="metric-container card-mis">
-                <div class="metric-label">Mispronounced</div>
-                <div class="metric-value">{mis}</div>
-                <div class="sub-metric">Close attempts</div>
-            </div>""", unsafe_allow_html=True)
-            
-            sub = metrics.get("substitution_count", 0)
-            k2.markdown(f"""
-            <div class="metric-container card-wrong">
-                <div class="metric-label">Wrong Words</div>
-                <div class="metric-value">{sub}</div>
-                <div class="sub-metric">Try again</div>
-            </div>""", unsafe_allow_html=True)
-            
-            dele = metrics.get("deletion_count", 0)
-            k3.markdown(f"""
-            <div class="metric-container card-skip">
-                <div class="metric-label">Skipped</div>
-                <div class="metric-value">{dele}</div>
-                <div class="sub-metric">Missed</div>
-            </div>""", unsafe_allow_html=True)
-            
-            stut = metrics.get("stutter_count", 0)
-            k4.markdown(f"""
-            <div class="metric-container card-stutter">
-                <div class="metric-label">Stutters</div>
-                <div class="metric-value">{stut}</div>
-                <div class="sub-metric">Repeats</div>
-            </div>""", unsafe_allow_html=True)
+            k1.markdown(f"<div class='metric-container card-mis'><div class='metric-label'>Mispronounced</div><div class='metric-value'>{metrics.get('mispronunciation_count', 0)}</div></div>", unsafe_allow_html=True)
+            k2.markdown(f"<div class='metric-container card-wrong'><div class='metric-label'>Wrong Words</div><div class='metric-value'>{metrics.get('substitution_count', 0)}</div></div>", unsafe_allow_html=True)
+            k3.markdown(f"<div class='metric-container card-skip'><div class='metric-label'>Skipped</div><div class='metric-value'>{metrics.get('deletion_count', 0)}</div></div>", unsafe_allow_html=True)
+            k4.markdown(f"<div class='metric-container card-stutter'><div class='metric-label'>Stutters</div><div class='metric-value'>{metrics.get('stutter_count', 0)}</div></div>", unsafe_allow_html=True)
 
-            # --- ROW 3: SPEEDOMETER (PACE) ---
-            st.markdown("<br>", unsafe_allow_html=True)
+            # Speedometer
             wpm = metrics.get('wpm', 0)
-            
-            display_wpm = min(wpm, 200)
-            marker_pos = (display_wpm / 200) * 100
-            
-            if wpm < 80: speed_text = "Slow"
-            elif wpm > 150: speed_text = "Fast"
-            else: speed_text = "Optimal"
+            marker_pos = (min(wpm, 200) / 200) * 100
+            st.markdown(f"""<div class="speed-container"><div class="speed-header"><span class="speed-title">Speaking Pace</span><span class="speed-value">{wpm} WPM</span></div><div class="speed-bar-wrapper"><div class="speed-bar-bg"></div><div class="speed-marker" style="left: {marker_pos}%;"></div></div><div class="speed-labels"><span>Slow</span><span>Optimal</span><span>Fast</span></div></div>""", unsafe_allow_html=True)
 
-            st.markdown(f"""
-            <div class="speed-container">
-                <div class="speed-header">
-                    <span class="speed-title">Speaking Pace</span>
-                    <span class="speed-value">{wpm} <span style="font-size:0.8em; color:#8b949e;">WPM</span></span>
-                </div>
-                <div class="speed-bar-wrapper">
-                    <div class="speed-bar-bg"></div>
-                    <div class="speed-marker" style="left: {marker_pos}%;"></div>
-                </div>
-                <div class="speed-labels">
-                    <span>Slow</span>
-                    <span>Optimal (110-150)</span>
-                    <span>Fast</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # --- TAB 2: ERROR TABLE & PRACTICE ---
         with t2:
             st.subheader("Word-by-Word Analysis")
             st.markdown(render_comparison_table(error_list), unsafe_allow_html=True)
-            
-            st.divider()
-            st.subheader("🎧 Practice Zone")
-            
-            practice_words = [e for e in error_list if e['type'] in ['mispronunciation', 'substitution']]
-            
-            if practice_words:
-                word_options = [f"{e['expected']} (You said: {e['actual']})" for e in practice_words]
-                
-                selected_option = st.selectbox("Select a word to practice:", word_options)
-                
-                if selected_option:
-                    target_word = selected_option.split(" (")[0]
-                    
-                    c1, c2 = st.columns([1, 3])
-                    with c1:
-                        if st.button(f"👂 Listen to '{target_word}'", use_container_width=True):
-                            try:
-                                params = {"text": target_word, "language": lang_code}
-                                r = requests.get(TTS_URL, params=params)
-                                
-                                if r.status_code == 200:
-                                    st.audio(r.content, format="audio/mp3")
-                                else:
-                                    st.error("Could not load audio.")
-                            except Exception as e:
-                                st.error(f"TTS Error: {e}")
-                    
-                    with c2:
-                        st.info(f"Tip: Listen closely to the difference. Try saying '{target_word}' slowly.")
-            else:
-                st.success("🌟 No specific words to practice! You read everything perfectly.")
 
         with t3:
+            st.subheader("🎧 Practice Zone")
+            st.caption("Click 'Listen' to hear the correct pronunciation immediately.")
+            
+            # 1. Filter the errors
+            mispronounced = [e for e in error_list if e['type'] == 'mispronunciation']
+            substitutions = [e for e in error_list if e['type'] == 'substitution']
+            
+            if not mispronounced and not substitutions:
+                st.success("🌟 Perfect reading! Nothing to practice here.")
+            else:
+                # Create two main columns for the "Tables"
+                col_mis, col_sub = st.columns(2)
+                
+                # --- LEFT COLUMN: Mispronounced ---
+                with col_mis:
+                    st.markdown("### 🗣️ Mispronounced")
+                    if not mispronounced:
+                        st.info("No pronunciation errors!")
+                    else:
+                        for i, err in enumerate(mispronounced):
+                            # Create a row-like structure: Word on left, Button on right
+                            r1, r2 = st.columns([0.65, 0.35])
+                            with r1:
+                                st.markdown(f"**{err['expected']}**")
+                                st.caption(f"You said: *{err['actual']}*")
+                            with r2:
+                                if st.button("👂 Listen", key=f"mis_btn_{i}", width="stretch"):
+                                    try:
+                                        params = {"text": err['expected'], "language": lang_code}
+                                        r = requests.get(TTS_URL, params=params)
+                                        if r.status_code == 200:
+                                            autoplay_audio(r.content)
+                                        else:
+                                            st.error("TTS Error")
+                                    except Exception as e:
+                                        st.error("Conn Error")
+                            st.divider()
+
+                # --- RIGHT COLUMN: Wrong Words ---
+                with col_sub:
+                    st.markdown("### 🔀 Wrong Words")
+                    if not substitutions:
+                        st.info("No word substitutions!")
+                    else:
+                        for i, err in enumerate(substitutions):
+                            r1, r2 = st.columns([0.65, 0.35])
+                            with r1:
+                                st.markdown(f"**{err['expected']}**")
+                                st.caption(f"You said: *{err['actual']}*")
+                            with r2:
+                                if st.button("👂 Listen", key=f"sub_btn_{i}", width="stretch"):
+                                    try:
+                                        params = {"text": err['expected'], "language": lang_code}
+                                        r = requests.get(TTS_URL, params=params)
+                                        if r.status_code == 200:
+                                            autoplay_audio(r.content)
+                                        else:
+                                            st.error("TTS Error")
+                                    except Exception as e:
+                                        st.error("Conn Error")
+                            st.divider()
+        with t4:
             st.markdown(f"<div class='passage-box'>{render_highlighted_passage(alignment)}</div>", unsafe_allow_html=True)
 
-        with t4:
+        with t5:
             st.subheader("Backend Logs")
             st.markdown(render_terminal_logs(logs), unsafe_allow_html=True)
+
+# -----------------------------
+# 4. ANALYTICS DASHBOARD (FIXED)
+# -----------------------------
+def render_dashboard():
+    st.title("📈 Progress Analytics")
+    st.caption("Track improvement over time.")
+
+    user_id = st.session_state["user"].id
+    
+    # Fetch Data
+    with st.spinner("Loading history..."):
+        try:
+            r = requests.get(f"{ANALYTICS_URL}{user_id}")
+            if r.status_code == 200:
+                payload = r.json()
+                # UNPACK THE NEW BACKEND STRUCTURE
+                stats = payload.get("stats", {})
+                history = payload.get("history", [])
+                error_dist = payload.get("errors", {})
+            else:
+                st.error("Failed to fetch analytics.")
+                return
+        except Exception as e:
+            st.error(f"Connection Error: {e}")
+            return
+
+    if not history:
+        st.info("No practice sessions found yet. Go to 'Practice Mode' and record your first session!")
+        return
+
+    # --- 1. TOP CARDS (Big Stats) ---
+    st.divider()
+    
+    # Use the pre-calculated stats from backend
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Sessions", stats.get("total_attempts", 0))
+    c2.metric("Avg Accuracy", f"{stats.get('avg_accuracy', 0)}%")
+    c3.metric("Avg WPM", f"{stats.get('avg_wpm', 0)}")
+
+    # --- 2. PREPARE HISTORY DATA ---
+    df = pd.DataFrame(history)
+    if not df.empty:
+        df['created_at'] = pd.to_datetime(df['created_at'])
+        df = df.sort_values('created_at')
+
+        # --- LINE CHART: Performance Trends ---
+        st.subheader("📊 Performance Over Time")
+        
+        tab_wpm, tab_acc = st.tabs(["⚡ Speed (WPM)", "🎯 Accuracy"])
+        
+        with tab_wpm:
+            fig_wpm = px.line(df, x='created_at', y='wpm', markers=True, 
+                              title="Words Per Minute Trend",
+                              line_shape="spline",
+                              labels={'wpm': 'Speed (WPM)', 'created_at': 'Date'})
+            fig_wpm.update_traces(line_color='#3498db')
+            # FIX: width="stretch"
+            st.plotly_chart(fig_wpm, width="stretch")
+
+        with tab_acc:
+            fig_acc = px.line(df, x='created_at', y=['accuracy_score', 'fluency_score'], markers=True,
+                              title="Accuracy & Fluency Trends",
+                              line_shape="spline")
+            # FIX: width="stretch"
+            st.plotly_chart(fig_acc, width="stretch")
+
+    # --- 3. PIE CHART: Error Distribution ---
+    st.subheader("🚧 Error Breakdown")
+    
+    if error_dist:
+        err_df = pd.DataFrame(list(error_dist.items()), columns=['Error Type', 'Count'])
+        
+        c_chart, c_text = st.columns([2, 1])
+        
+        with c_chart:
+            fig_pie = px.pie(err_df, values='Count', names='Error Type', 
+                             title="Distribution of Mistakes",
+                             hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
+            # FIX: width="stretch"
+            st.plotly_chart(fig_pie, width="stretch")
+            
+        with c_text:
+            st.markdown("### Top Issues")
+            sorted_errors = sorted(error_dist.items(), key=lambda x: x[1], reverse=True)
+            for e_type, count in sorted_errors:
+                st.write(f"**{e_type.title()}**: {count} times")
+    else:
+        st.success("No significant errors recorded in your history yet!")
+
+    # --- 4. RECENT HISTORY TABLE ---
+    st.subheader("📜 Recent Sessions")
+    display_df = df[['created_at', 'accuracy_score', 'wpm', 'fluency_score']].sort_values('created_at', ascending=False).head(10)
+    # FIX: width="stretch"
+    st.dataframe(display_df, width="stretch")
+
+# -----------------------------
+# 5. MAIN ENTRY POINT
+# -----------------------------
+def main():
+    if "user" not in st.session_state:
+        st.session_state["user"] = None
+
+    if not st.session_state["user"]:
+        show_login_page()
+        return
+
+    # --- SIDEBAR NAV ---
+    with st.sidebar:
+        st.image("https://cdn-icons-png.flaticon.com/512/2995/2995101.png", width=50) # Explicit width=50 is fine
+        st.markdown(f"### Hello, \n**{st.session_state['user'].email}**")
+        
+        mode = st.radio("Navigation", ["🎤 Practice Mode", "📈 Analytics Dashboard"], index=0)
+        
+        st.divider()
+        col_lang = st.container()
+        with col_lang:
+            selected_language = st.selectbox("Language", list(LANGUAGES.keys()))
+            lang_code = LANGUAGES[selected_language]
+        
+        st.divider()
+        # FIX: width="stretch"
+        if st.button("Logout", width="stretch"):
+            logout()
+
+    # --- ROUTING ---
+    if mode == "🎤 Practice Mode":
+        render_practice_mode(lang_code)
+    else:
+        render_dashboard()
 
 if __name__ == "__main__":
     main()
