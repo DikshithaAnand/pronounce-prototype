@@ -1,246 +1,480 @@
+/* =========================================
+   PRONOUNCE AI - DARK THEME (ACCESSIBLE)
+   ========================================= */
+
 /* --- General App Styling --- */
 .stApp {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #0d1117; /* Deep Dark Background */
+    color: #c9d1d9; /* Soft White Text */
 }
 
-/* --- Metric Cards --- */
+/* --- Metric Cards (Summary Tab) --- */
 .metric-container {
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
-    border-radius: 10px;
-    padding: 15px;
+    background-color: #161b22; /* Card Background */
+    border: 1px solid #30363d; /* Subtle Border */
+    border-radius: 12px;
+    padding: 20px;
     text-align: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    transition: transform 0.2s;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s ease, border-color 0.2s;
 }
 
 .metric-container:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transform: translateY(-3px);
+    border-color: #58a6ff; /* Blue glow on hover */
 }
 
 .metric-label {
     font-size: 0.85rem;
-    color: #6c757d;
+    color: #8b949e; /* Muted Text */
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 5px;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+    font-weight: 600;
 }
 
 .metric-value {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #212529;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #f0f6fc; /* Bright White */
 }
 
-/* --- Passage Highlighting --- */
-.passage-box {
-    font-size: 1.2rem;
-    line-height: 1.8;
-    padding: 20px;
-    
-    border-radius: 8px;
-    border: 1px solid #dee2e6;
-    margin-top: 20px;
-    
-    /* ADD THESE LINES FOR SCROLLING */
-    max-height: 400px;       /* Limit the height */
-    overflow-y: auto;        /* Add scrollbar if text is too long */
-    box-shadow: inset 0 -10px 10px -10px rgba(0,0,0,0.1); /* Subtle shadow hint */
-}
-
-.word-correct { color: #28a745; }
-.word-substitution { 
-    color: #dc3545; 
-    text-decoration: underline; 
-    text-decoration-style: wavy;
-    cursor: help;
-}
-.word-deletion { 
-    color: #adb5bd; 
-    text-decoration: line-through; 
-}
-.word-insertion { 
-    color: #fd7e14; 
-    font-size: 0.8em; 
-    vertical-align: super; 
-}
-.word-stutter { 
-    background-color: #fff3cd; 
-    border-bottom: 2px solid #ffc107; 
-}
-
-/* --- COOL LOGGING TERMINAL --- */
-.terminal-window {
-    background-color: #0d1117; /* GitHub Dark Dim */
-    border-radius: 6px;
-    border: 1px solid #30363d;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    font-family: 'Fira Code', 'Courier New', monospace;
-    font-size: 12px;
-    margin-top: 20px;
-    overflow: hidden;
-}
-
-.terminal-header {
-    background-color: #161b22;
-    padding: 8px 12px;
-    border-bottom: 1px solid #30363d;
-    display: flex;
-    align-items: center;
-}
-
-.terminal-dots {
-    display: flex;
-    gap: 6px;
-    margin-right: 10px;
-}
-
-.dot { width: 10px; height: 10px; border-radius: 50%; }
-.red { background-color: #ff5f56; }
-.yellow { background-color: #ffbd2e; }
-.green { background-color: #27c93f; }
-
-.terminal-title {
+.sub-metric {
+    font-size: 0.85rem;
     color: #8b949e;
-    margin-left: auto;
-    font-size: 10px;
+    margin-top: 4px;
 }
 
-.terminal-body {
-    padding: 15px;
-    max-height: 300px;
-    overflow-y: auto;
-    color: #c9d1d9;
-}
-
-/* Log Levels Colors */
-.log-entry { margin-bottom: 4px; display: flex; }
-.log-timestamp { color: #8b949e; margin-right: 10px; min-width: 80px; }
-.log-INFO { color: #58a6ff; font-weight: bold; margin-right: 8px;}
-.log-WARNING { color: #d29922; font-weight: bold; margin-right: 8px;}
-.log-ERROR { color: #f85149; font-weight: bold; margin-right: 8px;}
-
-/* Detail Row for Dropdown */
-.detail-row {
-    padding: 8px;
-    border-bottom: 1px solid #eee;
-}
-.status-substitution { background-color: #fff5f5; }
-
-/* ... (Keep your existing CSS) ... */
-
-/* --- SPEEDOMETER STYLES --- */
+/* --- Speedometer (PACE) - FIXED VISIBILITY --- */
 .speed-container {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
-    margin-top: 10px;
-    border: 1px solid #e9ecef;
+    background: #161b22;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 15px;
+    border: 1px solid #30363d;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 .speed-bar-bg {
-    height: 10px;
+    height: 14px; /* Taller for visibility */
     width: 100%;
+    /* Gradient: Yellow (Slow) -> Green (Optimal) -> Red (Fast) */
     background: linear-gradient(90deg, 
-        #ffc107 0%,   /* Slow (Yellow) */
-        #28a745 40%,  /* Optimal (Green) */
-        #28a745 60%, 
-        #dc3545 100%  /* Fast (Red) */
+        #d29922 0%,   /* Slow (Mustard) */
+        #2ea043 35%,  /* Good (Green) */
+        #2ea043 65%, 
+        #ff5f56 100%  /* Fast (Red) */
     );
-    border-radius: 5px;
+    border-radius: 7px;
     position: relative;
-    margin-top: 10px;
+    margin-top: 15px;
+    margin-bottom: 10px;
 }
 
 .speed-marker {
-    width: 4px;
-    height: 18px;
-    background-color: #212529;
+    width: 6px;
+    height: 24px; /* Taller than the bar */
+    background-color: #ffffff; /* BRIGHT WHITE MARKER */
     position: absolute;
-    top: -4px;
+    top: -5px; /* Center vertically relative to bar */
+    border-radius: 3px;
+    transition: left 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.8); /* GLOW EFFECT */
+    z-index: 10;
+}
+
+/* --- Passage Highlighting (Karaoke View) --- */
+.passage-box {
+    background-color: #161b22;
+    font-size: 1.3rem;
+    line-height: 2;
+    padding: 25px;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+    margin-top: 20px;
+    color: #c9d1d9;
+    
+    /* Scroll logic */
+    max-height: 450px;
+    overflow-y: auto;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+
+/* Highlighting Colors (Dark Mode Optimized) */
+.word-correct { color: #3fb950; } /* Bright Green */
+
+.word-mispronunciation {
+    color: #d29922; /* Warning Gold */
+    border-bottom: 2px dashed #d29922;
+    cursor: help;
+}
+
+.word-substitution { 
+    color: #ff7b72; /* Soft Red */
+    text-decoration: underline; 
+    text-decoration-style: wavy;
+    text-decoration-color: #ff7b72;
+    cursor: help;
+}
+
+.word-deletion { 
+    color: #484f58; /* Dark Gray (Ghosted) */
+    text-decoration: line-through; 
+}
+
+.word-insertion { 
+    color: #a5d6ff; /* Light Blue */
+    font-size: 0.8em; 
+    vertical-align: super; 
+    font-weight: bold;
+}
+
+.word-stutter { 
+    color: #e3b341; 
+    border-bottom: 2px solid #e3b341;
+}
+
+/* --- Comparison Table (Errors Tab) --- */
+.comparison-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 15px;
+    font-size: 1rem;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.comparison-table th {
+    background-color: #21262d; /* Header Darker */
+    color: #f0f6fc;
+    font-weight: 600;
+    text-align: left;
+    padding: 15px;
+    border-bottom: 2px solid #30363d;
+}
+
+.comparison-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #30363d;
+    color: #c9d1d9;
+}
+
+.comparison-table tr:hover td {
+    background-color: #21262d; /* Hover effect */
+}
+
+/* --- Badges (For Table) --- */
+.badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Mispronounced -> Orange/Gold */
+.badge-mis { 
+    background-color: rgba(210, 153, 34, 0.15); 
+    color: #d29922; 
+    border: 1px solid rgba(210, 153, 34, 0.4);
+}
+
+/* Wrong Word -> Red */
+.badge-sub { 
+    background-color: rgba(248, 81, 73, 0.15); 
+    color: #ff7b72; 
+    border: 1px solid rgba(248, 81, 73, 0.4);
+}
+
+/* Skipped -> Gray */
+.badge-del { 
+    background-color: rgba(139, 148, 158, 0.15); 
+    color: #8b949e; 
+    border: 1px solid rgba(139, 148, 158, 0.4);
+    text-decoration: line-through;
+}
+
+/* Added -> Blue */
+.badge-ins { 
+    background-color: rgba(88, 166, 255, 0.15); 
+    color: #58a6ff; 
+    border: 1px solid rgba(88, 166, 255, 0.4);
+}
+
+/* --- Terminal Logs (Already Dark, just Tweaking Borders) --- */
+.terminal-window {
+    background-color: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+}
+.terminal-header {
+    background-color: #161b22;
+    border-bottom: 1px solid #30363d;
+}
+.log-INFO { color: #58a6ff; }
+.log-WARNING { color: #d29922; }
+.log-ERROR { color: #ff7b72; }
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0d1117; 
+}
+::-webkit-scrollbar-thumb {
+    background: #30363d; 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #8b949e; 
+}
+/* =========================================
+   PRONOUNCE AI - VIBRANT DARK THEME
+   ========================================= */
+
+/* --- General App Styling --- */
+.stApp {
+    font-family: 'Inter', sans-serif;
+    background-color: #0d1117;
+    color: #e6edf3;
+}
+
+/* --- Base Metric Card --- */
+.metric-container {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    transition: transform 0.2s;
+}
+.metric-container:hover { transform: translateY(-3px); }
+
+.metric-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 5px;
+    opacity: 0.8;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 800;
+}
+
+.sub-metric { font-size: 0.75rem; opacity: 0.7; margin-top: 4px; }
+
+/* --- COLOR VARIANTS (The Request) --- */
+
+/* 1. CORRECT (Green) */
+.card-correct {
+    background-color: rgba(46, 160, 67, 0.15); /* Transparent Green */
+    border: 1px solid rgba(46, 160, 67, 0.4);
+}
+.card-correct .metric-value { color: #3fb950; } /* Bright Green Text */
+.card-correct .metric-label { color: #3fb950; }
+
+/* 2. MISPRONOUNCED (Yellow/Gold) */
+.card-mis {
+    background-color: rgba(210, 153, 34, 0.15);
+    border: 1px solid rgba(210, 153, 34, 0.4);
+}
+.card-mis .metric-value { color: #d29922; }
+.card-mis .metric-label { color: #d29922; }
+
+/* 3. WRONG / SUBSTITUTION (Red) */
+.card-wrong {
+    background-color: rgba(248, 81, 73, 0.15);
+    border: 1px solid rgba(248, 81, 73, 0.4);
+}
+.card-wrong .metric-value { color: #ff7b72; }
+.card-wrong .metric-label { color: #ff7b72; }
+
+/* 4. SKIPPED (Gray/Dim) */
+.card-skip {
+    background-color: rgba(110, 118, 129, 0.15);
+    border: 1px solid rgba(110, 118, 129, 0.4);
+}
+.card-skip .metric-value { color: #8b949e; }
+.card-skip .metric-label { color: #8b949e; }
+
+/* 5. STUTTERS (Orange) */
+.card-stutter {
+    background-color: rgba(219, 109, 40, 0.15);
+    border: 1px solid rgba(219, 109, 40, 0.4);
+}
+.card-stutter .metric-value { color: #f0883e; }
+.card-stutter .metric-label { color: #f0883e; }
+
+
+/* --- SPEEDOMETER (Fixed Visibility) --- */
+.speed-container {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 10px;
+}
+
+.speed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+}
+.speed-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+}
+.speed-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f0f6fc;
+}
+
+.speed-bar-wrapper {
+    position: relative;
+    height: 12px;
+    width: 100%;
+    margin: 10px 0;
+}
+
+.speed-bar-bg {
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    /* Gradient: Slow(Yellow) -> Good(Green) -> Fast(Red) */
+    background: linear-gradient(90deg, 
+        #d29922 0%, 
+        #3fb950 40%, 
+        #3fb950 60%, 
+        #ff7b72 100%
+    );
+    opacity: 0.8;
+}
+
+.speed-marker {
+    position: absolute;
+    top: -4px; /* Slightly taller than the bar */
+    width: 4px;
+    height: 20px;
+    background-color: #ffffff;
     border-radius: 2px;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    z-index: 10;
     transition: left 0.5s ease-out;
-    box-shadow: 0 0 4px rgba(0,0,0,0.5);
 }
 
 .speed-labels {
     display: flex;
     justify-content: space-between;
     font-size: 0.75rem;
-    color: #6c757d;
+    color: #8b949e;
     margin-top: 5px;
 }
 
-/* --- SEVERITY CARDS (Stutter/Missing) --- */
-.metric-danger { color: #dc3545; }
-.metric-warning { color: #ffc107; }
-.metric-success { color: #28a745; }
-
-.sub-metric {
-    font-size: 0.8rem;
-    color: #6c757d;
-    margin-top: 2px;
+/* --- Keep previous table/passage styles below --- */
+.passage-box {
+    background-color: #161b22;
+    font-size: 1.3rem;
+    line-height: 2;
+    padding: 25px;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+    max-height: 450px;
+    overflow-y: auto;
+    color: #e6edf3;
 }
 
-/* ... (Keep existing styles) ... */
+.word-correct { color: #3fb950; }
+.word-mispronunciation { color: #d29922; border-bottom: 2px dashed #d29922; cursor: help; }
+.word-substitution { color: #ff7b72; text-decoration: underline; text-decoration-style: wavy; cursor: help; }
+.word-deletion { color: #8b949e; text-decoration: line-through; opacity: 0.6; }
+.word-insertion { color: #a5d6ff; vertical-align: super; font-size: 0.8em; font-weight: bold; }
+.word-stutter { color: #f0883e; border-bottom: 2px solid #f0883e; }
 
-/* --- COMPARISON TABLE STYLES --- */
-.comparison-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-    font-size: 0.95rem;
-    background: white;
-    border: 1px solid #e9ecef;
-    border-radius: 8px; /* Note: border-radius on tables requires overflow:hidden on wrapper */
-}
+/* Table Badges */
+.badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+.badge-mis { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid #d29922; }
+.badge-sub { background: rgba(248, 81, 73, 0.2); color: #ff7b72; border: 1px solid #ff7b72; }
+.badge-del { background: rgba(110, 118, 129, 0.2); color: #8b949e; border: 1px solid #8b949e; text-decoration: line-through; }
+.badge-ins { background: rgba(88, 166, 255, 0.2); color: #58a6ff; border: 1px solid #58a6ff; }
 
-.comparison-table th {
-    background-color: #f8f9fa;
-    color: #495057;
+/* --- TOAST NOTIFICATIONS (Popups) --- */
+/* --- TOAST NOTIFICATIONS (Centered Popup) --- */
+.toast-container {
+    position: fixed;
+    left: 50%;
+    top: 40%; /* Positioned slightly above true center for better visibility */
+    transform: translate(-50%, -50%); /* Centers the element perfectly */
+    z-index: 999999;
+    
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+    
+    background-color: #161b22;
+    border: 1px solid;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    
+    font-size: 1rem;
     font-weight: 600;
-    text-align: left;
-    padding: 12px 15px;
-    border-bottom: 2px solid #dee2e6;
+    min-width: 300px; /* Ensure it's not too skinny */
+    justify-content: center;
+    
+    /* Animation: Fade In -> Wait -> Fade Out */
+    animation: toast-center-anim 4s forwards;
+    opacity: 0; /* Start hidden */
 }
 
-.comparison-table td {
-    padding: 10px 15px;
-    border-bottom: 1px solid #f1f3f5;
-    color: #212529;
+/* Error (Red) */
+.toast-error {
+    border-color: #ff7b72;
+    color: #ff7b72;
+    background: linear-gradient(145deg, rgba(40, 10, 10, 0.95), #161b22);
 }
 
-.comparison-table tr:last-child td {
-    border-bottom: none;
+/* Success (Green) */
+.toast-success {
+    border-color: #3fb950;
+    color: #3fb950;
+    background: linear-gradient(145deg, rgba(10, 30, 15, 0.95), #161b22);
 }
 
-/* Status Indicators in Table */
-.badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
+/* Animation Keyframes for Centering */
+@keyframes toast-center-anim {
+    0% { 
+        opacity: 0; 
+        transform: translate(-50%, -40%) scale(0.9); /* Start slightly lower & smaller */
+    }
+    10% { 
+        opacity: 1; 
+        transform: translate(-50%, -50%) scale(1); /* Pop to center */
+    }
+    80% { 
+        opacity: 1; 
+        transform: translate(-50%, -50%) scale(1); /* Stay */
+    }
+    100% { 
+        opacity: 0; 
+        transform: translate(-50%, -60%) scale(0.95); /* Fade out moving up */
+        visibility: hidden; 
+    }
 }
 
-.badge-sub { background-color: #ffe3e3; color: #c92a2a; } /* Red for Substitution */
-.badge-del { background-color: #f1f3f5; color: #868e96; text-decoration: line-through;} /* Grey for Delete */
-.badge-ins { background-color: #fff3bf; color: #e67700; } /* Yellow for Insert */
-
-/* ... existing badge styles ... */
-
-/* New Badge for Mispronunciation (Orange/Warning) */
-.badge-mis { 
-    background-color: #fff3bf; 
-    color: #f08c00; 
-    border: 1px solid #fcc419;
-}
-
-/* Update Wrong Word to be distinctly Red */
-.badge-sub { 
-    background-color: #ffe3e3; 
-    color: #c92a2a; 
-    border: 1px solid #ff8787;
-}

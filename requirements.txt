@@ -37,3 +37,16 @@ soundfile
 sqlalchemy
 psycopg2-binary
 alembic
+supabase
+python-dotenv
+
+#tts
+edge-tts
+
+extra-streamlit-components
+plotly
+pandas
+numpy
+
+matplotlib
+wordcloud
