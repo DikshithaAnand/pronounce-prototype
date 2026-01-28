@@ -17,10 +17,7 @@ An open-source, offline pronunciation-learning tool for Indian languages, using:
 <h2>📋 Prerequisites</h2>
 
 <ol>
-<li>
-<b>Install Docker Desktop:</b> 
-Download and install it from the <a href="https://www.docker.com">official Docker website</a>.
-</li>
+
 <li>
 <b>Install FFmpeg:</b> Required for audio processing (see the <a href="#-installing-ffmpeg">FFmpeg section</a> below).
 </li>
