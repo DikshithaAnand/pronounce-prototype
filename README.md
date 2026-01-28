@@ -1,4 +1,4 @@
-<h1>🗣️ Multilingual Pronunciation Learning System (Prototype)</h1>
+<h1> Multilingual Pronunciation Learning System (Prototype)</h1>
 
 <p>
 An open-source, offline pronunciation-learning tool for Indian languages, using:
@@ -140,32 +140,91 @@ C:\ffmpeg\bin
 
 <hr>
 
+<h2>🗄️ Database Setup (Supabase)</h2>
+
+<p>This project uses Supabase as its database. Follow these steps to configure it:</p>
+
+<h3>1. Create Supabase Project</h3>
+<ol>
+<li>Go to <a href="https://supabase.com/">Supabase</a> and create a new project.</li>
+<li>Navigate to the <strong>SQL Editor</strong> in the left sidebar.</li>
+<li>Paste and run the following SQL script to create the necessary tables:</li>
+</ol>
+
+<pre>
+-- 1. Create Users Table (Optional if using Supabase Auth, but good for custom metadata)
+create table public.profiles (
+  id uuid references auth.users not null primary key,
+  username text unique,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. Create Attempts Table (Stores each recording session)
+create table public.attempts (
+  id uuid default gen_random_uuid() primary key,
+  user_name text not null, -- Stores the user UUID or Name
+  passage_text text not null,
+  audio_url text,
+  wpm float,
+  accuracy_score float,
+  fluency_score float,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 3. Create Attempt Errors Table (Stores granular word-level errors)
+create table public.attempt_errors (
+  id uuid default gen_random_uuid() primary key,
+  attempt_id uuid references public.attempts(id) on delete cascade not null,
+  word text not null,
+  error_type text not null, -- 'deletion', 'substitution', 'insertion'
+  confidence_score float,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 4. Enable Row Level Security (RLS) - Optional but Recommended
+alter table public.attempts enable row level security;
+alter table public.attempt_errors enable row level security;
+
+-- 5. Create Storage Bucket for Audio
+insert into storage.buckets (id, name)
+values ('audio-uploads', 'audio-uploads');
+</pre>
+
+<h3>2. Configure Environment Variables</h3>
+<p>You need to create <strong>two</strong> <code>.env</code> files: one for the backend and one for the frontend.</p>
+
+<h4>Backend (.env)</h4>
+<p>Create a file named <code>.env</code> inside the <code>backend/</code> folder:</p>
+<pre>
+# backend/.env
+SUPABASE_URL="https://your-project-ref.supabase.co"
+SUPABASE_KEY="your-anon-key-here"
+</pre>
+
+<h4>Frontend (.env)</h4>
+<p>Create a file named <code>.env</code> inside the <code>frontend/</code> folder (or <code>.streamlit/secrets.toml</code> if deploying):</p>
+<pre>
+# frontend/.env
+API_URL="http://localhost:8000"
+</pre>
+
+<hr>
+
 <h2>▶️ Running the Application</h2>
 
 <h3>Start Backend</h3>
 <pre>
 # From the root directory
-python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 </pre>
 
 <h3>Start Frontend</h3>
 <pre>
+# Open a new terminal
 cd frontend
 streamlit run app.py
 </pre>
 
-<hr>
-
-<h2>📣 Contributing</h2>
-<p>Tasks your team will build next:</p>
-<ul>
-<li>Hybrid scoring engine</li>
-<li>Speech embeddings with Wav2Vec2-XLSR</li>
-<li>Multilingual support</li>
-<li>Word-level segmentation</li>
-<li>Forced alignment improvements</li>
-<li>UI visualization</li>
-</ul>
 
 <h2>📝 License</h2>
 <p>MIT License</p>
