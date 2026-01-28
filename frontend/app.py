@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 import base64
+import extra_streamlit_components as stx
 
 # --- AUTH IMPORT ---
 from auth_client import login, signup, logout
@@ -17,7 +18,11 @@ from auth_client import login, signup, logout
 # -----------------------------
 # Configuration
 # -----------------------------
-
+class SessionUser:
+    def __init__(self, id, email):
+        self.id = id
+        self.email = email
+        
 st.set_page_config(
     page_title="Pronounce AI",
     layout="wide",  # WIDE layout for Dashboard
@@ -62,7 +67,7 @@ LANGUAGES = {
 # 1. AUTHENTICATION
 # -----------------------------
 
-def show_login_page():
+def show_login_page(cookie_manager):
     c1, c2, c3 = st.columns([1,2,1])
     with c2:
         st.markdown("<h1 style='text-align: center;'>🔐 Login to Pronounce</h1>", unsafe_allow_html=True)
@@ -71,13 +76,17 @@ def show_login_page():
         with tab1:
             email = st.text_input("Email", key="login_email")
             password = st.text_input("Password", type="password", key="login_pass")
-            # FIX: width="stretch"
             if st.button("Login", width="stretch"):
                 with st.spinner("Logging in..."):
                     user, error = login(email, password)
                     if user:
+                        # --- SAVE COOKIE (Persist Session) ---
+                        # We store ID and Email separated by '::'
+                        cookie_manager.set("pronounce_auth", f"{user.id}::{user.email}", key="set_login_cookie")
+                        
                         st.session_state["user"] = user
                         st.success("Welcome back!")
+                        time.sleep(0.5) # Give cookie time to set
                         st.rerun()
                     else:
                         st.error(f"Error: {error}")
@@ -85,17 +94,19 @@ def show_login_page():
         with tab2:
             new_email = st.text_input("Email", key="signup_email")
             new_password = st.text_input("Password", type="password", key="signup_pass")
-            # FIX: width="stretch"
             if st.button("Create Account", width="stretch"):
                 with st.spinner("Creating account..."):
                     user, error = signup(new_email, new_password)
                     if user:
+                        # --- SAVE COOKIE ---
+                        cookie_manager.set("pronounce_auth", f"{user.id}::{user.email}", key="set_signup_cookie")
+                        
                         st.success("Account created!")
                         st.session_state["user"] = user
+                        time.sleep(0.5)
                         st.rerun()
                     else:
                         st.error(f"Error: {error}")
-
 # -----------------------------
 # 2. HELPER FUNCTIONS
 # -----------------------------
@@ -466,16 +477,32 @@ def render_dashboard():
 # 5. MAIN ENTRY POINT
 # -----------------------------
 def main():
-    if "user" not in st.session_state:
-        st.session_state["user"] = None
+    # 1. Initialize Cookie Manager
+    cookie_manager = stx.CookieManager()
 
+    # 2. Auto-Login Check (If user is not in state, check cookies)
+    if "user" not in st.session_state or st.session_state["user"] is None:
+        cookie_val = cookie_manager.get("pronounce_auth")
+        if cookie_val:
+            try:
+                # Reconstruct user object from the cookie string "ID::Email"
+                uid, uemail = cookie_val.split("::")
+                st.session_state["user"] = SessionUser(uid, uemail)
+            except Exception:
+                # If cookie is corrupted, delete it
+                cookie_manager.delete("pronounce_auth")
+                st.session_state["user"] = None
+        else:
+            st.session_state["user"] = None
+
+    # 3. If still no user, show Login Page
     if not st.session_state["user"]:
-        show_login_page()
+        show_login_page(cookie_manager) # Pass the manager to the login page
         return
 
     # --- SIDEBAR NAV ---
     with st.sidebar:
-        st.image("https://cdn-icons-png.flaticon.com/512/2995/2995101.png", width=50) # Explicit width=50 is fine
+        st.image("https://cdn-icons-png.flaticon.com/512/2995/2995101.png", width=50)
         st.markdown(f"### Hello, \n**{st.session_state['user'].email}**")
         
         mode = st.radio("Navigation", ["🎤 Practice Mode", "📈 Analytics Dashboard"], index=0)
@@ -487,15 +514,22 @@ def main():
             lang_code = LANGUAGES[selected_language]
         
         st.divider()
-        # FIX: width="stretch"
+        
         if st.button("Logout", width="stretch"):
+            # --- DELETE COOKIE ON LOGOUT (SAFE MODE) ---
+            try:
+                cookie_manager.delete("pronounce_auth")
+            except KeyError:
+                # If cookie is already gone, just ignore the error
+                pass
+            
             logout()
-
+            st.rerun()
+            
     # --- ROUTING ---
     if mode == "🎤 Practice Mode":
         render_practice_mode(lang_code)
     else:
         render_dashboard()
-
 if __name__ == "__main__":
     main()

@@ -42,3 +42,8 @@ python-dotenv
 
 #tts
 edge-tts
+
+extra-streamlit-components
+plotly
+pandas
+numpy
